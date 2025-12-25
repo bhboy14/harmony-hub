@@ -109,7 +109,7 @@ const Index = () => {
           <div className="space-y-8 animate-fade-in">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground mt-1">Manage your masjid's audio and prayer systems</p>
+              <p className="text-muted-foreground mt-1">Your space, your sound, seamlessly integrated</p>
             </div>
 
             {/* Quick Stats */}
@@ -234,8 +234,8 @@ const Index = () => {
         {activeTab === "azan" && (
           <div className="max-w-2xl mx-auto animate-fade-in">
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">Azan Player</h1>
-              <p className="text-muted-foreground mt-1">Configure automated prayer calls with smart music fading</p>
+              <h1 className="text-3xl font-bold text-foreground">Athan Schedule</h1>
+              <p className="text-muted-foreground mt-1">Configure automated prayer calls with smart audio management</p>
             </div>
             <AzanPlayer 
               isAzanPlaying={azanScheduler.isAzanPlaying}
@@ -265,10 +265,10 @@ const Index = () => {
         )}
 
         {activeTab === "pa" && (
-          <div className="max-w-2xl mx-auto animate-fade-in">
+          <div className="max-w-4xl mx-auto animate-fade-in">
             <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">PA System</h1>
-              <p className="text-muted-foreground mt-1">Broadcast announcements to all zones</p>
+              <h1 className="text-3xl font-bold text-foreground">Broadcast Mode</h1>
+              <p className="text-muted-foreground mt-1">Live announcements with professional audio effects</p>
             </div>
             <PASystem />
           </div>

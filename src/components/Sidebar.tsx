@@ -4,7 +4,7 @@ import {
   Bell, 
   Megaphone, 
   Settings,
-  Moon
+  Radio
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -17,8 +17,8 @@ export const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "library", label: "Media Library", icon: Music },
-    { id: "azan", label: "Azan Player", icon: Bell },
-    { id: "pa", label: "PA System", icon: Megaphone },
+    { id: "azan", label: "Athan Schedule", icon: Bell },
+    { id: "pa", label: "Broadcast Mode", icon: Megaphone },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
@@ -28,11 +28,11 @@ export const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center glow-primary">
-            <Moon className="h-5 w-5 text-primary-foreground" />
+            <Radio className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="font-semibold text-lg text-sidebar-foreground">Masjid Hub</h1>
-            <p className="text-xs text-muted-foreground">Media & Audio System</p>
+            <h1 className="font-semibold text-lg text-sidebar-foreground">Intra Jam</h1>
+            <p className="text-xs text-muted-foreground">Your Space, Your Sound</p>
           </div>
         </div>
       </div>
