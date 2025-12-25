@@ -248,9 +248,35 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   }, [tokens, refreshPlaybackState]);
 
   const play = useCallback(async (uri?: string, uris?: string[]) => {
-    await callSpotifyApi("play", { uri, uris });
+    // Get current devices to find an active one or select first available
+    const deviceList = await callSpotifyApi("get_devices");
+    const availableDevices = deviceList?.devices || [];
+    
+    // Find active device, or use first available device
+    let targetDeviceId: string | undefined;
+    const activeDevice = availableDevices.find((d: SpotifyDevice) => d.is_active);
+    
+    if (activeDevice) {
+      targetDeviceId = activeDevice.id;
+    } else if (availableDevices.length > 0) {
+      // No active device, transfer to first available device
+      targetDeviceId = availableDevices[0].id;
+      toast({ 
+        title: "Activating device", 
+        description: `Starting playback on ${availableDevices[0].name}` 
+      });
+    } else {
+      toast({ 
+        title: "No devices available", 
+        description: "Open Spotify on a device first (phone, computer, or speaker)", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState]);
+  }, [callSpotifyApi, refreshPlaybackState, toast]);
 
   const pause = useCallback(async () => {
     await callSpotifyApi("pause");
