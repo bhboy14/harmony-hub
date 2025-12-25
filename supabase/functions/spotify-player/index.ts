@@ -5,6 +5,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Helper to safely parse response - handles non-JSON and empty responses
+async function safeParseResponse(response: Response): Promise<any> {
+  if (response.status === 204) {
+    return { success: true };
+  }
+  
+  const text = await response.text();
+  if (!text) {
+    return { success: response.ok };
+  }
+  
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.error("Non-JSON response:", text.substring(0, 100));
+    if (!response.ok) {
+      throw new Error(`Spotify API error: ${response.status} - ${text.substring(0, 100)}`);
+    }
+    return { success: true, raw: text };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -29,17 +51,13 @@ serve(async (req) => {
       case "get_devices":
         console.log("Getting available devices");
         response = await fetch("https://api.spotify.com/v1/me/player/devices", { headers });
-        data = await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "get_playback":
         console.log("Getting playback state");
         response = await fetch("https://api.spotify.com/v1/me/player", { headers });
-        if (response.status === 204) {
-          data = null;
-        } else {
-          data = await response.json();
-        }
+        data = response.status === 204 ? null : await safeParseResponse(response);
         break;
 
       case "play":
@@ -57,7 +75,7 @@ serve(async (req) => {
             body: Object.keys(playBody).length > 0 ? JSON.stringify(playBody) : undefined,
           }
         );
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "pause":
@@ -66,7 +84,7 @@ serve(async (req) => {
           method: "PUT",
           headers,
         });
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "next":
@@ -75,7 +93,7 @@ serve(async (req) => {
           method: "POST",
           headers,
         });
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "previous":
@@ -84,7 +102,7 @@ serve(async (req) => {
           method: "POST",
           headers,
         });
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "volume":
@@ -96,7 +114,7 @@ serve(async (req) => {
             headers,
           }
         );
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "search":
@@ -106,19 +124,19 @@ serve(async (req) => {
           `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=20`,
           { headers }
         );
-        data = await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "get_playlists":
         console.log("Getting user playlists");
         response = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", { headers });
-        data = await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "get_saved_tracks":
         console.log("Getting saved tracks");
         response = await fetch("https://api.spotify.com/v1/me/tracks?limit=50", { headers });
-        data = await response.json();
+        data = await safeParseResponse(response);
         break;
 
       case "transfer":
@@ -128,7 +146,7 @@ serve(async (req) => {
           headers,
           body: JSON.stringify({ device_ids: [deviceId], play: true }),
         });
-        data = response.status === 204 ? { success: true } : await response.json();
+        data = await safeParseResponse(response);
         break;
 
       default:
