@@ -1,0 +1,338 @@
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+interface SpotifyTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: { name: string }[];
+  album: {
+    name: string;
+    images: { url: string }[];
+  };
+  duration_ms: number;
+  uri: string;
+}
+
+interface SpotifyPlaybackState {
+  isPlaying: boolean;
+  track: SpotifyTrack | null;
+  progress: number;
+  volume: number;
+  device: { id: string; name: string; type: string } | null;
+}
+
+interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string;
+  is_active: boolean;
+}
+
+interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  images: { url: string }[];
+  tracks: { total: number };
+}
+
+interface SpotifyContextType {
+  isConnected: boolean;
+  isLoading: boolean;
+  tokens: SpotifyTokens | null;
+  playbackState: SpotifyPlaybackState | null;
+  devices: SpotifyDevice[];
+  playlists: SpotifyPlaylist[];
+  savedTracks: SpotifyTrack[];
+  connect: () => Promise<void>;
+  disconnect: () => void;
+  play: (uri?: string, uris?: string[]) => Promise<void>;
+  pause: () => Promise<void>;
+  next: () => Promise<void>;
+  previous: () => Promise<void>;
+  setVolume: (volume: number) => Promise<void>;
+  fadeVolume: (targetVolume: number, durationMs: number) => Promise<void>;
+  transferPlayback: (deviceId: string) => Promise<void>;
+  refreshPlaybackState: () => Promise<void>;
+  loadPlaylists: () => Promise<void>;
+  loadSavedTracks: () => Promise<void>;
+}
+
+const SpotifyContext = createContext<SpotifyContextType | null>(null);
+
+const STORAGE_KEY = "spotify_tokens";
+const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/spotify-callback` : "";
+
+export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
+  const [tokens, setTokens] = useState<SpotifyTokens | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [playbackState, setPlaybackState] = useState<SpotifyPlaybackState | null>(null);
+  const [devices, setDevices] = useState<SpotifyDevice[]>([]);
+  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
+  const [savedTracks, setSavedTracks] = useState<SpotifyTrack[]>([]);
+  const { toast } = useToast();
+
+  // Load tokens from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setTokens(parsed);
+      } catch (e) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  // Save tokens to localStorage
+  useEffect(() => {
+    if (tokens) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [tokens]);
+
+  // Refresh token if expired
+  const ensureValidToken = useCallback(async (): Promise<string | null> => {
+    if (!tokens) return null;
+
+    if (Date.now() < tokens.expiresAt - 60000) {
+      return tokens.accessToken;
+    }
+
+    console.log("Refreshing Spotify token...");
+    try {
+      const { data, error } = await supabase.functions.invoke("spotify-auth", {
+        body: { action: "refresh", refreshToken: tokens.refreshToken },
+      });
+
+      if (error) throw error;
+
+      const newTokens: SpotifyTokens = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || tokens.refreshToken,
+        expiresAt: Date.now() + data.expires_in * 1000,
+      };
+      setTokens(newTokens);
+      return newTokens.accessToken;
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      setTokens(null);
+      toast({ title: "Spotify session expired", description: "Please reconnect.", variant: "destructive" });
+      return null;
+    }
+  }, [tokens, toast]);
+
+  const callSpotifyApi = useCallback(async (action: string, params: Record<string, any> = {}) => {
+    const accessToken = await ensureValidToken();
+    if (!accessToken) throw new Error("Not connected to Spotify");
+
+    const { data, error } = await supabase.functions.invoke("spotify-player", {
+      body: { action, accessToken, ...params },
+    });
+
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }, [ensureValidToken]);
+
+  const connect = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("spotify-auth", {
+        body: { action: "get_auth_url", redirectUri: REDIRECT_URI },
+      });
+
+      if (error) throw error;
+      
+      // Open Spotify auth in a popup
+      const width = 450;
+      const height = 730;
+      const left = window.screenX + (window.innerWidth - width) / 2;
+      const top = window.screenY + (window.innerHeight - height) / 2;
+      
+      window.open(
+        data.authUrl,
+        "Spotify Login",
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+    } catch (error) {
+      console.error("Spotify connect error:", error);
+      toast({ title: "Failed to connect", description: "Could not initiate Spotify login.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  // Handle callback from popup
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === "spotify-callback" && event.data.code) {
+        setIsLoading(true);
+        try {
+          const { data, error } = await supabase.functions.invoke("spotify-auth", {
+            body: { action: "exchange", code: event.data.code, redirectUri: REDIRECT_URI },
+          });
+
+          if (error) throw error;
+
+          const newTokens: SpotifyTokens = {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            expiresAt: Date.now() + data.expires_in * 1000,
+          };
+          setTokens(newTokens);
+          toast({ title: "Connected to Spotify", description: "Your Spotify account is now linked." });
+        } catch (error) {
+          console.error("Token exchange error:", error);
+          toast({ title: "Connection failed", description: "Could not complete Spotify login.", variant: "destructive" });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [toast]);
+
+  const disconnect = useCallback(() => {
+    setTokens(null);
+    setPlaybackState(null);
+    setDevices([]);
+    setPlaylists([]);
+    setSavedTracks([]);
+    toast({ title: "Disconnected", description: "Spotify account unlinked." });
+  }, [toast]);
+
+  const refreshPlaybackState = useCallback(async () => {
+    try {
+      const [playback, deviceList] = await Promise.all([
+        callSpotifyApi("get_playback"),
+        callSpotifyApi("get_devices"),
+      ]);
+
+      if (playback) {
+        setPlaybackState({
+          isPlaying: playback.is_playing,
+          track: playback.item,
+          progress: playback.progress_ms,
+          volume: playback.device?.volume_percent ?? 100,
+          device: playback.device,
+        });
+      } else {
+        setPlaybackState(null);
+      }
+
+      setDevices(deviceList?.devices || []);
+    } catch (error) {
+      console.error("Failed to refresh playback:", error);
+    }
+  }, [callSpotifyApi]);
+
+  // Poll playback state when connected
+  useEffect(() => {
+    if (!tokens) return;
+
+    refreshPlaybackState();
+    const interval = setInterval(refreshPlaybackState, 5000);
+    return () => clearInterval(interval);
+  }, [tokens, refreshPlaybackState]);
+
+  const play = useCallback(async (uri?: string, uris?: string[]) => {
+    await callSpotifyApi("play", { uri, uris });
+    setTimeout(refreshPlaybackState, 500);
+  }, [callSpotifyApi, refreshPlaybackState]);
+
+  const pause = useCallback(async () => {
+    await callSpotifyApi("pause");
+    setTimeout(refreshPlaybackState, 500);
+  }, [callSpotifyApi, refreshPlaybackState]);
+
+  const next = useCallback(async () => {
+    await callSpotifyApi("next");
+    setTimeout(refreshPlaybackState, 500);
+  }, [callSpotifyApi, refreshPlaybackState]);
+
+  const previous = useCallback(async () => {
+    await callSpotifyApi("previous");
+    setTimeout(refreshPlaybackState, 500);
+  }, [callSpotifyApi, refreshPlaybackState]);
+
+  const setVolume = useCallback(async (volume: number) => {
+    await callSpotifyApi("volume", { volume: Math.round(volume) });
+    setPlaybackState((prev) => prev ? { ...prev, volume } : null);
+  }, [callSpotifyApi]);
+
+  const fadeVolume = useCallback(async (targetVolume: number, durationMs: number) => {
+    const startVolume = playbackState?.volume ?? 100;
+    const steps = 20;
+    const stepDuration = durationMs / steps;
+    const volumeStep = (targetVolume - startVolume) / steps;
+
+    for (let i = 1; i <= steps; i++) {
+      const newVolume = Math.round(startVolume + volumeStep * i);
+      await setVolume(Math.max(0, Math.min(100, newVolume)));
+      await new Promise((r) => setTimeout(r, stepDuration));
+    }
+  }, [playbackState?.volume, setVolume]);
+
+  const transferPlayback = useCallback(async (deviceId: string) => {
+    await callSpotifyApi("transfer", { deviceId });
+    setTimeout(refreshPlaybackState, 1000);
+  }, [callSpotifyApi, refreshPlaybackState]);
+
+  const loadPlaylists = useCallback(async () => {
+    const data = await callSpotifyApi("get_playlists");
+    setPlaylists(data?.items || []);
+  }, [callSpotifyApi]);
+
+  const loadSavedTracks = useCallback(async () => {
+    const data = await callSpotifyApi("get_saved_tracks");
+    setSavedTracks(data?.items?.map((i: any) => i.track) || []);
+  }, [callSpotifyApi]);
+
+  return (
+    <SpotifyContext.Provider
+      value={{
+        isConnected: !!tokens,
+        isLoading,
+        tokens,
+        playbackState,
+        devices,
+        playlists,
+        savedTracks,
+        connect,
+        disconnect,
+        play,
+        pause,
+        next,
+        previous,
+        setVolume,
+        fadeVolume,
+        transferPlayback,
+        refreshPlaybackState,
+        loadPlaylists,
+        loadSavedTracks,
+      }}
+    >
+      {children}
+    </SpotifyContext.Provider>
+  );
+};
+
+export const useSpotify = () => {
+  const context = useContext(SpotifyContext);
+  if (!context) {
+    throw new Error("useSpotify must be used within a SpotifyProvider");
+  }
+  return context;
+};
