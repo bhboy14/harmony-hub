@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,7 +18,8 @@ import {
   Laptop,
   LogOut,
   Loader2,
-  ListMusic
+  ListMusic,
+  Lock
 } from "lucide-react";
 
 // Spotify brand icon
@@ -55,6 +57,9 @@ export const SpotifyPlayer = () => {
     loadPlaylists,
     loadSavedTracks,
   } = useSpotify();
+  
+  const { hasPermission } = useAuth();
+  const canControl = hasPermission('dj');
 
   useEffect(() => {
     if (isConnected) {
@@ -148,21 +153,27 @@ export const SpotifyPlayer = () => {
 
             {/* Controls */}
             <div className="flex items-center justify-center gap-4 mt-4">
-              <Button variant="ghost" size="icon" onClick={previous}>
+              <Button variant="ghost" size="icon" onClick={previous} disabled={!canControl}>
                 <SkipBack className="h-5 w-5" />
               </Button>
               <Button 
                 variant="glow" 
                 size="lg"
-                className="bg-[#1DB954] hover:bg-[#1ed760] text-black"
+                className="bg-[#1DB954] hover:bg-[#1ed760] text-black disabled:opacity-50"
                 onClick={() => playbackState.isPlaying ? pause() : play()}
+                disabled={!canControl}
               >
                 {playbackState.isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={next}>
+              <Button variant="ghost" size="icon" onClick={next} disabled={!canControl}>
                 <SkipForward className="h-5 w-5" />
               </Button>
             </div>
+            {!canControl && (
+              <p className="text-xs text-muted-foreground text-center mt-2 flex items-center justify-center gap-1">
+                <Lock className="h-3 w-3" /> Only DJs and Admins can control playback
+              </p>
+            )}
 
             {/* Volume */}
             <div className="flex items-center gap-3 mt-4">
@@ -173,6 +184,7 @@ export const SpotifyPlayer = () => {
                 step={1}
                 onValueChange={([v]) => setVolume(v)}
                 className="flex-1"
+                disabled={!canControl}
               />
               <span className="text-xs text-muted-foreground w-8">{playbackState.volume}%</span>
             </div>
@@ -193,12 +205,13 @@ export const SpotifyPlayer = () => {
               {devices.map((device) => (
                 <button
                   key={device.id}
-                  onClick={() => transferPlayback(device.id)}
+                  onClick={() => canControl && transferPlayback(device.id)}
+                  disabled={!canControl}
                   className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
                     device.is_active 
                       ? "bg-[#1DB954]/20 border border-[#1DB954]/30" 
                       : "bg-secondary/30 hover:bg-secondary/50"
-                  }`}
+                  } ${!canControl ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
                   {getDeviceIcon(device.type)}
                   <span className="flex-1 text-left text-sm">{device.name}</span>
@@ -224,8 +237,9 @@ export const SpotifyPlayer = () => {
                 {playlists.map((playlist) => (
                   <button
                     key={playlist.id}
-                    onClick={() => play(`spotify:playlist:${playlist.id}`)}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all"
+                    onClick={() => canControl && play(`spotify:playlist:${playlist.id}`)}
+                    disabled={!canControl}
+                    className={`w-full flex items-center gap-3 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all ${!canControl ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     {playlist.images[0] ? (
                       <img src={playlist.images[0].url} alt="" className="w-10 h-10 rounded" />
@@ -247,8 +261,9 @@ export const SpotifyPlayer = () => {
                 {savedTracks.slice(0, 20).map((track) => (
                   <button
                     key={track.id}
-                    onClick={() => play(undefined, [track.uri])}
-                    className="w-full flex items-center gap-3 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all"
+                    onClick={() => canControl && play(undefined, [track.uri])}
+                    disabled={!canControl}
+                    className={`w-full flex items-center gap-3 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all ${!canControl ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     {track.album.images[0] ? (
                       <img src={track.album.images[0].url} alt="" className="w-10 h-10 rounded" />
