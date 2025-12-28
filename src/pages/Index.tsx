@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
 import { PrayerTimesCard } from "@/components/PrayerTimesCard";
 import { AzanPlayer } from "@/components/AzanPlayer";
@@ -6,15 +7,17 @@ import { PASystem } from "@/components/PASystem";
 import { MediaLibrary } from "@/components/MediaLibrary";
 import { SpotifyPlayer } from "@/components/SpotifyPlayer";
 import { SettingsPanel } from "@/components/SettingsPanel";
+import { AdminPanel } from "@/components/AdminPanel";
+import { RoleGate } from "@/components/RoleGate";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler, PostAzanAction } from "@/hooks/useAzanScheduler";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Users, Clock, Music, HardDrive, Music2 } from "lucide-react";
+import { Activity, Users, Clock, Music, HardDrive, Music2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
 // Spotify brand icon
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
@@ -24,11 +27,31 @@ const SpotifyIcon = () => (
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const { user, isLoading: authLoading, role } = useAuth();
   const { prayerTimes, nextPrayer, timeUntilNext } = usePrayerTimes();
   const mediaLibrary = useMediaLibrary();
   const spotify = useSpotify();
   const { toast } = useToast();
 
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [authLoading, user, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
   // Azan scheduler integration with Spotify
   const handleFadeOut = useCallback(async (durationMs: number) => {
     if (spotify.isConnected && spotify.playbackState?.isPlaying) {
@@ -271,6 +294,16 @@ const Index = () => {
               <p className="text-muted-foreground mt-1">Live announcements with professional audio effects</p>
             </div>
             <PASystem />
+          </div>
+        )}
+
+        {activeTab === "admin" && (
+          <div className="animate-fade-in">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-foreground">User Management</h1>
+              <p className="text-muted-foreground mt-1">Manage user roles and permissions</p>
+            </div>
+            <AdminPanel />
           </div>
         )}
 
