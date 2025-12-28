@@ -4,9 +4,12 @@ import {
   Bell, 
   Megaphone, 
   Settings,
-  Radio
+  Radio,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/UserMenu";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SidebarProps {
   activeTab: string;
@@ -14,13 +17,21 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
+  const { hasPermission, user } = useAuth();
+
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "library", label: "Media Library", icon: Music },
     { id: "azan", label: "Athan Schedule", icon: Bell },
-    { id: "pa", label: "Broadcast Mode", icon: Megaphone },
+    { id: "pa", label: "Broadcast Mode", icon: Megaphone, requiredRole: 'dj' as const },
+    { id: "admin", label: "User Management", icon: Shield, requiredRole: 'admin' as const },
     { id: "settings", label: "Settings", icon: Settings },
   ];
+
+  const filteredNavItems = navItems.filter(item => {
+    if (!item.requiredRole) return true;
+    return hasPermission(item.requiredRole);
+  });
 
   return (
     <div className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col fixed left-0 top-0">
@@ -39,7 +50,7 @@ export const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        {navItems.map((item) => {
+        {filteredNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
@@ -60,8 +71,13 @@ export const Sidebar = ({ activeTab, setActiveTab }: SidebarProps) => {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
+      {/* User Menu & Status */}
+      <div className="p-4 border-t border-sidebar-border space-y-4">
+        {user && (
+          <div className="flex items-center justify-between">
+            <UserMenu />
+          </div>
+        )}
         <div className="p-3 rounded-lg bg-sidebar-accent/50">
           <p className="text-xs text-muted-foreground">System Status</p>
           <div className="flex items-center gap-2 mt-1">
