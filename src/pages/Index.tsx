@@ -6,6 +6,7 @@ import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
 import { MediaLibrary } from "@/components/MediaLibrary";
 import { SpotifyPlayer } from "@/components/SpotifyPlayer";
+import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
 import { RoleGate } from "@/components/RoleGate";
@@ -16,7 +17,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Users, Clock, Music, HardDrive, Music2, Loader2 } from "lucide-react";
+import { Activity, Users, Clock, Music, HardDrive, Music2, Loader2, Youtube } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 // Spotify brand icon
 const SpotifyIcon = () => (
@@ -239,6 +240,10 @@ const Index = () => {
                   <div className="text-[#1DB954]"><SpotifyIcon /></div>
                   Spotify
                 </TabsTrigger>
+                <TabsTrigger value="youtube" className="gap-2">
+                  <Youtube className="h-4 w-4 text-[#FF0000]" />
+                  YouTube
+                </TabsTrigger>
                 <TabsTrigger value="local" className="gap-2">
                   <HardDrive className="h-4 w-4" />
                   Local Library
@@ -246,6 +251,9 @@ const Index = () => {
               </TabsList>
               <TabsContent value="spotify" className="h-[calc(100vh-12rem)]">
                 <SpotifyPlayer />
+              </TabsContent>
+              <TabsContent value="youtube" className="h-[calc(100vh-12rem)]">
+                <YouTubePlayer />
               </TabsContent>
               <TabsContent value="local" className="h-[calc(100vh-12rem)]">
                 <MediaLibrary {...mediaLibrary} />
