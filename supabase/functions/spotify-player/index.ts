@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,12 +11,12 @@ async function safeParseResponse(response: Response): Promise<any> {
   if (response.status === 204) {
     return { success: true };
   }
-  
+
   const text = await response.text();
   if (!text) {
     return { success: response.ok };
   }
-  
+
   try {
     return JSON.parse(text);
   } catch {
@@ -33,7 +34,37 @@ serve(async (req) => {
   }
 
   try {
-    const { action, accessToken, deviceId, uri, uris, position, volume } = await req.json();
+    // Verify user authentication (this function is configured with verify_jwt=false,
+    // so we must validate the bearer token ourselves)
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
+
+    if (authError || !user) {
+      console.log("Authentication failed:", authError?.message);
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { action, accessToken, deviceId, uri, uris, position, volume, query, type } =
+      await req.json();
 
     if (!accessToken) {
       throw new Error("Access token required");
@@ -118,10 +149,9 @@ serve(async (req) => {
         break;
 
       case "search":
-        const { query, type = "track" } = await req.json();
         console.log("Searching for", query, "type", type);
         response = await fetch(
-          `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=20`,
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type || "track"}&limit=20`,
           { headers }
         );
         data = await safeParseResponse(response);
