@@ -35,25 +35,7 @@ const Index = () => {
   const spotify = useSpotify();
   const { toast } = useToast();
 
-  // Redirect to auth if not logged in
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate('/auth');
-    }
-  }, [authLoading, user, navigate]);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-  // Azan scheduler integration with Spotify
+  // Azan scheduler integration with Spotify - hooks must be called before any early returns
   const handleFadeOut = useCallback(async (durationMs: number) => {
     if (spotify.isConnected && spotify.playbackState?.isPlaying) {
       await spotify.fadeVolume(0, durationMs);
@@ -80,8 +62,6 @@ const Index = () => {
 
   const handlePlayAzan = useCallback(async () => {
     toast({ title: "Azan", description: "Playing Azan..." });
-    // In a real implementation, this would play the actual Azan audio
-    // For now, we'll just show a toast
   }, [toast]);
 
   const azanScheduler = useAzanScheduler({
@@ -93,6 +73,25 @@ const Index = () => {
     onPlayAzan: handlePlayAzan,
     isPlaying: spotify.playbackState?.isPlaying || false,
   });
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/auth');
+    }
+  }, [authLoading, user, navigate]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   const StatCard = ({ icon: Icon, label, value, accent, color }: { 
     icon: any; 
