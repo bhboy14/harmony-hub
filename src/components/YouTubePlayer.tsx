@@ -112,6 +112,20 @@ export const YouTubePlayer = () => {
     };
   }, []);
 
+  const onPlayerReady = useCallback((event: any) => {
+    setIsLoading(false);
+    setDuration(event.target.getDuration());
+    event.target.setVolume(volume);
+  }, [volume]);
+
+  const onPlayerStateChange = useCallback((event: any) => {
+    if (event.data === (window as any).YT?.PlayerState?.PLAYING) {
+      setIsPlaying(true);
+    } else if (event.data === (window as any).YT?.PlayerState?.PAUSED) {
+      setIsPlaying(false);
+    }
+  }, []);
+
   // Load YouTube IFrame API
   useEffect(() => {
     if (!videoId) return;
@@ -163,21 +177,7 @@ export const YouTubePlayer = () => {
         playerRef.current.destroy();
       }
     };
-  }, [videoId]);
-
-  const onPlayerReady = (event: any) => {
-    setIsLoading(false);
-    setDuration(event.target.getDuration());
-    event.target.setVolume(volume);
-  };
-
-  const onPlayerStateChange = (event: any) => {
-    if (event.data === (window as any).YT.PlayerState.PLAYING) {
-      setIsPlaying(true);
-    } else if (event.data === (window as any).YT.PlayerState.PAUSED) {
-      setIsPlaying(false);
-    }
-  };
+  }, [videoId, onPlayerReady, onPlayerStateChange]);
 
   // Update current time
   useEffect(() => {
