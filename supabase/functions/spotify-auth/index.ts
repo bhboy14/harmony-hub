@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,33 @@ serve(async (req) => {
   }
 
   try {
+    // Verify user authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.log("No authorization header provided");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      console.log("Authentication failed:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Authenticated user:", user.id);
+
     const { action, code, redirectUri, refreshToken } = await req.json();
     const SPOTIFY_CLIENT_ID = Deno.env.get("SPOTIFY_CLIENT_ID");
     const SPOTIFY_CLIENT_SECRET = Deno.env.get("SPOTIFY_CLIENT_SECRET");
@@ -19,7 +47,7 @@ serve(async (req) => {
       throw new Error("Spotify credentials not configured");
     }
 
-    const authHeader = btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`);
+    const spotifyBasicAuth = btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`);
 
     if (action === "exchange") {
       // Exchange authorization code for tokens
@@ -28,7 +56,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Basic ${authHeader}`,
+          Authorization: `Basic ${spotifyBasicAuth}`,
         },
         body: new URLSearchParams({
           grant_type: "authorization_code",
@@ -57,7 +85,7 @@ serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Basic ${authHeader}`,
+          Authorization: `Basic ${spotifyBasicAuth}`,
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
@@ -106,9 +134,8 @@ serve(async (req) => {
     throw new Error("Invalid action");
   } catch (error) {
     console.error("Spotify auth error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "An error occurred processing your request" }),
       {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
