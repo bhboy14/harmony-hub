@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SpotifyTokens {
   accessToken: string;
@@ -51,7 +52,7 @@ interface SpotifyContextType {
   playlists: SpotifyPlaylist[];
   savedTracks: SpotifyTrack[];
   connect: () => Promise<void>;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
   play: (uri?: string, uris?: string[]) => Promise<void>;
   pause: () => Promise<void>;
   next: () => Promise<void>;
@@ -66,39 +67,92 @@ interface SpotifyContextType {
 
 const SpotifyContext = createContext<SpotifyContextType | null>(null);
 
-const STORAGE_KEY = "spotify_tokens";
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/spotify-callback` : "";
 
 export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [playbackState, setPlaybackState] = useState<SpotifyPlaybackState | null>(null);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [savedTracks, setSavedTracks] = useState<SpotifyTrack[]>([]);
   const { toast } = useToast();
+  const { user } = useAuth();
 
-  // Load tokens from localStorage on mount
+  // Load tokens from database on mount or when user changes
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setTokens(parsed);
-      } catch (e) {
-        localStorage.removeItem(STORAGE_KEY);
+    const loadTokensFromDb = async () => {
+      if (!user) {
+        setTokens(null);
+        setIsLoading(false);
+        return;
       }
-    }
-  }, []);
 
-  // Save tokens to localStorage
-  useEffect(() => {
-    if (tokens) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tokens));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
+      try {
+        const { data, error } = await supabase
+          .from('spotify_tokens')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error loading Spotify tokens:', error);
+        } else if (data) {
+          setTokens({
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            expiresAt: new Date(data.expires_at).getTime(),
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load Spotify tokens:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTokensFromDb();
+  }, [user]);
+
+  // Save tokens to database
+  const saveTokensToDb = useCallback(async (newTokens: SpotifyTokens) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('spotify_tokens')
+        .upsert({
+          user_id: user.id,
+          access_token: newTokens.accessToken,
+          refresh_token: newTokens.refreshToken,
+          expires_at: new Date(newTokens.expiresAt).toISOString(),
+        }, { onConflict: 'user_id' });
+
+      if (error) {
+        console.error('Error saving Spotify tokens:', error);
+      }
+    } catch (err) {
+      console.error('Failed to save Spotify tokens:', err);
     }
-  }, [tokens]);
+  }, [user]);
+
+  // Delete tokens from database
+  const deleteTokensFromDb = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('spotify_tokens')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error deleting Spotify tokens:', error);
+      }
+    } catch (err) {
+      console.error('Failed to delete Spotify tokens:', err);
+    }
+  }, [user]);
 
   // Refresh token if expired
   const ensureValidToken = useCallback(async (): Promise<string | null> => {
@@ -122,14 +176,16 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         expiresAt: Date.now() + data.expires_in * 1000,
       };
       setTokens(newTokens);
+      await saveTokensToDb(newTokens);
       return newTokens.accessToken;
     } catch (error) {
       console.error("Token refresh failed:", error);
       setTokens(null);
+      await deleteTokensFromDb();
       toast({ title: "Spotify session expired", description: "Please reconnect.", variant: "destructive" });
       return null;
     }
-  }, [tokens, toast]);
+  }, [tokens, toast, saveTokensToDb, deleteTokensFromDb]);
 
   const callSpotifyApi = useCallback(async (action: string, params: Record<string, any> = {}) => {
     const accessToken = await ensureValidToken();
@@ -190,6 +246,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
             expiresAt: Date.now() + data.expires_in * 1000,
           };
           setTokens(newTokens);
+          await saveTokensToDb(newTokens);
           toast({ title: "Connected to Spotify", description: "Your Spotify account is now linked." });
         } catch (error) {
           console.error("Token exchange error:", error);
@@ -202,16 +259,17 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [toast]);
+  }, [toast, saveTokensToDb]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
+    await deleteTokensFromDb();
     setTokens(null);
     setPlaybackState(null);
     setDevices([]);
     setPlaylists([]);
     setSavedTracks([]);
     toast({ title: "Disconnected", description: "Spotify account unlinked." });
-  }, [toast]);
+  }, [toast, deleteTokensFromDb]);
 
   const refreshPlaybackState = useCallback(async () => {
     try {
