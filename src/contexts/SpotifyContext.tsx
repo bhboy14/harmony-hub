@@ -77,7 +77,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [savedTracks, setSavedTracks] = useState<SpotifyTrack[]>([]);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session, isLoading: authLoading } = useAuth();
 
   // Load tokens from database on mount or when user changes
   useEffect(() => {
@@ -164,8 +164,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
     console.log("Refreshing Spotify token...");
     try {
+      if (!session?.access_token) throw new Error("Missing session");
+
       const { data, error } = await supabase.functions.invoke("spotify-auth", {
         body: { action: "refresh", refreshToken: tokens.refreshToken },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
       if (error) throw error;
@@ -185,7 +188,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       toast({ title: "Spotify session expired", description: "Please reconnect.", variant: "destructive" });
       return null;
     }
-  }, [tokens, toast, saveTokensToDb, deleteTokensFromDb]);
+  }, [tokens, session?.access_token, toast, saveTokensToDb, deleteTokensFromDb]);
 
   const callSpotifyApi = useCallback(async (action: string, params: Record<string, any> = {}) => {
     const accessToken = await ensureValidToken();
@@ -193,18 +196,24 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
     const { data, error } = await supabase.functions.invoke("spotify-player", {
       body: { action, accessToken, ...params },
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined,
     });
 
     if (error) throw error;
     if (data?.error) throw new Error(data.error);
     return data;
-  }, [ensureValidToken]);
+  }, [ensureValidToken, session?.access_token]);
 
   const connect = useCallback(async () => {
     setIsLoading(true);
     try {
+      if (authLoading || !session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
       const { data, error } = await supabase.functions.invoke("spotify-auth", {
         body: { action: "get_auth_url", redirectUri: REDIRECT_URI },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
       if (error) throw error;
@@ -226,7 +235,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, authLoading, session?.access_token]);
 
   // Handle callback from popup
   useEffect(() => {
@@ -234,8 +243,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       if (event.data?.type === "spotify-callback" && event.data.code) {
         setIsLoading(true);
         try {
+          if (authLoading || !session?.access_token) {
+            throw new Error("Not authenticated");
+          }
+
           const { data, error } = await supabase.functions.invoke("spotify-auth", {
             body: { action: "exchange", code: event.data.code, redirectUri: REDIRECT_URI },
+            headers: { Authorization: `Bearer ${session.access_token}` },
           });
 
           if (error) throw error;
@@ -259,7 +273,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [toast, saveTokensToDb]);
+  }, [toast, saveTokensToDb, authLoading, session?.access_token]);
 
   const disconnect = useCallback(async () => {
     await deleteTokensFromDb();
