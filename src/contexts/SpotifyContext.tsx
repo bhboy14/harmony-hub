@@ -310,6 +310,45 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [callSpotifyApi]);
 
+  // Background token refresh scheduler - proactively refresh tokens before expiry
+  useEffect(() => {
+    if (!tokens || !session?.access_token) return;
+
+    const scheduleRefresh = () => {
+      const timeUntilExpiry = tokens.expiresAt - Date.now();
+      // Refresh 5 minutes before expiry, or immediately if less than 5 min left
+      const refreshIn = Math.max(timeUntilExpiry - 5 * 60 * 1000, 0);
+      
+      console.log(`Spotify token refresh scheduled in ${Math.round(refreshIn / 1000 / 60)} minutes`);
+      
+      return setTimeout(async () => {
+        console.log("Background: Refreshing Spotify token...");
+        try {
+          const { data, error } = await supabase.functions.invoke("spotify-auth", {
+            body: { action: "refresh", refreshToken: tokens.refreshToken },
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+
+          if (error) throw error;
+
+          const newTokens: SpotifyTokens = {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token || tokens.refreshToken,
+            expiresAt: Date.now() + data.expires_in * 1000,
+          };
+          setTokens(newTokens);
+          await saveTokensToDb(newTokens);
+          console.log("Background: Spotify token refreshed successfully");
+        } catch (error) {
+          console.error("Background token refresh failed:", error);
+        }
+      }, refreshIn);
+    };
+
+    const timeoutId = scheduleRefresh();
+    return () => clearTimeout(timeoutId);
+  }, [tokens, session?.access_token, saveTokensToDb]);
+
   // Poll playback state when connected
   useEffect(() => {
     if (!tokens) return;
