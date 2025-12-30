@@ -9,6 +9,7 @@ import { SpotifyPlayer } from "@/components/SpotifyPlayer";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
+import { PlaybackBar } from "@/components/PlaybackBar";
 import { RoleGate } from "@/components/RoleGate";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary } from "@/hooks/useMediaLibrary";
@@ -124,7 +125,7 @@ const Index = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
       <main className="ml-64 p-8">
@@ -324,6 +325,8 @@ const Index = () => {
           </div>
         )}
       </main>
+      
+      <PlaybackBar />
     </div>
   );
 };
