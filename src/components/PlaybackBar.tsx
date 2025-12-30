@@ -1,6 +1,12 @@
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Play, 
   Pause, 
@@ -10,7 +16,12 @@ import {
   VolumeX,
   Repeat,
   Shuffle,
-  MonitorSpeaker
+  MonitorSpeaker,
+  Laptop,
+  Smartphone,
+  Speaker,
+  Tv,
+  Check
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
@@ -21,16 +32,33 @@ const SpotifyIcon = () => (
   </svg>
 );
 
+const getDeviceIcon = (type: string) => {
+  switch (type?.toLowerCase()) {
+    case 'computer':
+      return Laptop;
+    case 'smartphone':
+      return Smartphone;
+    case 'speaker':
+      return Speaker;
+    case 'tv':
+      return Tv;
+    default:
+      return MonitorSpeaker;
+  }
+};
+
 export const PlaybackBar = () => {
   const { hasPermission } = useAuth();
   const { 
     isConnected, 
     playbackState, 
+    devices,
     play, 
     pause, 
     next, 
     previous, 
     setVolume,
+    transferPlayback,
     connect
   } = useSpotify();
   
@@ -204,13 +232,64 @@ export const PlaybackBar = () => {
 
         {/* Right: Volume & Device */}
         <div className="flex items-center justify-end gap-3">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          >
-            <MonitorSpeaker className="h-4 w-4" />
-          </Button>
+          {/* Device Selector Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className={`h-8 w-8 ${playbackState?.device ? 'text-[#1DB954]' : 'text-muted-foreground'} hover:text-foreground`}
+                disabled={!canControl}
+              >
+                {playbackState?.device ? (
+                  (() => {
+                    const DeviceIcon = getDeviceIcon(playbackState.device.type);
+                    return <DeviceIcon className="h-4 w-4" />;
+                  })()
+                ) : (
+                  <MonitorSpeaker className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent 
+              align="end" 
+              className="w-64 bg-popover border border-border shadow-lg z-[60]"
+              sideOffset={8}
+            >
+              <div className="px-3 py-2 border-b border-border">
+                <p className="text-sm font-medium text-foreground">Connect to a device</p>
+                <p className="text-xs text-muted-foreground">Select a device to play on</p>
+              </div>
+              {devices.length === 0 ? (
+                <div className="px-3 py-4 text-center">
+                  <p className="text-sm text-muted-foreground">No devices found</p>
+                  <p className="text-xs text-muted-foreground mt-1">Open Spotify on a device</p>
+                </div>
+              ) : (
+                devices.map((device) => {
+                  const DeviceIcon = getDeviceIcon(device.type);
+                  const isActive = device.is_active;
+                  return (
+                    <DropdownMenuItem 
+                      key={device.id}
+                      onClick={() => !isActive && transferPlayback(device.id)}
+                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer ${isActive ? 'bg-[#1DB954]/10' : ''}`}
+                    >
+                      <DeviceIcon className={`h-5 w-5 ${isActive ? 'text-[#1DB954]' : 'text-muted-foreground'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm truncate ${isActive ? 'text-[#1DB954] font-medium' : 'text-foreground'}`}>
+                          {device.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground capitalize">{device.type}</p>
+                      </div>
+                      {isActive && <Check className="h-4 w-4 text-[#1DB954]" />}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
           <div className="flex items-center gap-2 w-32">
             <Button 
               variant="ghost" 
@@ -235,7 +314,7 @@ export const PlaybackBar = () => {
             />
           </div>
           {playbackState?.device && (
-            <span className="text-xs text-muted-foreground hidden lg:block">
+            <span className="text-xs text-muted-foreground hidden lg:block max-w-24 truncate">
               {playbackState.device.name}
             </span>
           )}
