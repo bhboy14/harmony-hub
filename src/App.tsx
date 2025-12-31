@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SpotifyProvider } from "@/contexts/SpotifyContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PAProvider } from "@/contexts/PAContext";
+import { UnifiedAudioProvider } from "@/contexts/UnifiedAudioContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
@@ -20,18 +21,20 @@ const App = () => (
       <AuthProvider>
         <SpotifyProvider>
           <PAProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/spotify-callback" element={<SpotifyCallback />} />
-                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
+            <UnifiedAudioProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/spotify-callback" element={<SpotifyCallback />} />
+                  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </UnifiedAudioProvider>
           </PAProvider>
         </SpotifyProvider>
       </AuthProvider>
