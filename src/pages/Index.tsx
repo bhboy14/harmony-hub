@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { PrayerTimesCard } from "@/components/PrayerTimesCard";
+import { PrayerTimesCompact } from "@/components/PrayerTimesCompact";
+import { QuickLibrary } from "@/components/QuickLibrary";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
 import { MediaLibrary } from "@/components/MediaLibrary";
@@ -18,8 +19,9 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, Users, Clock, Music, HardDrive, Music2, Loader2, Youtube } from "lucide-react";
+import { Loader2, Youtube, HardDrive } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
 // Spotify brand icon
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
@@ -94,36 +96,6 @@ const Index = () => {
     return null;
   }
 
-  const StatCard = ({ icon: Icon, label, value, accent, color }: { 
-    icon: any; 
-    label: string; 
-    value: string; 
-    accent?: boolean;
-    color?: string;
-  }) => (
-    <Card className="glass-panel">
-      <CardContent className="p-4">
-        <div className="flex items-center gap-4">
-          <div 
-            className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-              color ? "" : accent ? "bg-accent/20" : "bg-primary/20"
-            }`}
-            style={color ? { backgroundColor: `${color}20` } : {}}
-          >
-            <Icon 
-              className={`h-6 w-6 ${color ? "" : accent ? "text-accent" : "text-primary"}`}
-              style={color ? { color } : {}}
-            />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold text-foreground">{value}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   return (
     <div className="min-h-screen bg-background pb-20">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -136,94 +108,56 @@ const Index = () => {
               <p className="text-muted-foreground mt-1">Your space, your sound, seamlessly integrated</p>
             </div>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard icon={Clock} label="Next Prayer" value={nextPrayer?.name || "—"} />
-              <StatCard icon={Activity} label="Time Until" value={timeUntilNext || "—"} accent />
-              <StatCard 
-                icon={SpotifyIcon} 
-                label="Spotify" 
-                value={spotify.isConnected ? "Connected" : "Disconnected"} 
-                color="#1DB954"
-              />
-              <StatCard icon={Users} label="Active Zones" value="5" accent />
-            </div>
+            {/* Prayer Times - Compact Top Bar */}
+            <PrayerTimesCompact 
+              prayerTimes={prayerTimes} 
+              nextPrayer={nextPrayer} 
+              timeUntilNext={timeUntilNext} 
+            />
 
             {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PrayerTimesCard 
-                prayerTimes={prayerTimes} 
-                nextPrayer={nextPrayer} 
-                timeUntilNext={timeUntilNext} 
-              />
-              <div className="space-y-6">
-                <Card className="glass-panel">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={() => setActiveTab("azan")}
-                      className="p-4 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all text-left"
-                    >
-                      <span className="font-arabic text-2xl text-accent block">الأذان</span>
-                      <span className="text-sm text-muted-foreground">Play Azan</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("pa")}
-                      className="p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 transition-all text-left"
-                    >
-                      <span className="text-2xl">📢</span>
-                      <span className="text-sm text-muted-foreground block">Announcement</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("library")}
-                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                    >
-                      <span className="text-2xl">🎵</span>
-                      <span className="text-sm text-muted-foreground block">Media Library</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("settings")}
-                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                    >
-                      <span className="text-2xl">⚙️</span>
-                      <span className="text-sm text-muted-foreground block">Settings</span>
-                    </button>
-                  </CardContent>
-                </Card>
-                
-                {/* Now Playing Preview */}
-                {spotify.playbackState?.track && (
-                  <Card className="glass-panel bg-gradient-to-br from-[#1DB954]/10 to-primary/5 border-[#1DB954]/20">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <div className="text-[#1DB954]"><SpotifyIcon /></div>
-                        Now Playing
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-3">
-                        {spotify.playbackState.track.album.images[0] && (
-                          <img 
-                            src={spotify.playbackState.track.album.images[0].url}
-                            alt=""
-                            className="w-12 h-12 rounded shadow"
-                          />
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground truncate">
-                            {spotify.playbackState.track.name}
-                          </p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {spotify.playbackState.track.artists.map(a => a.name).join(", ")}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Quick Library - Takes 2 columns */}
+              <div className="lg:col-span-2">
+                <QuickLibrary onOpenFullLibrary={() => setActiveTab("library")} />
               </div>
+
+              {/* Quick Actions */}
+              <Card className="glass-panel">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Quick Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3">
+                  <button 
+                    onClick={() => setActiveTab("azan")}
+                    className="p-4 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all text-left"
+                  >
+                    <span className="font-arabic text-2xl text-accent block">الأذان</span>
+                    <span className="text-sm text-muted-foreground">Play Azan</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("pa")}
+                    className="p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 transition-all text-left"
+                  >
+                    <span className="text-2xl">📢</span>
+                    <span className="text-sm text-muted-foreground block">Announcement</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("library")}
+                    className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
+                  >
+                    <span className="text-2xl">🎵</span>
+                    <span className="text-sm text-muted-foreground block">Full Library</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("settings")}
+                    className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
+                  >
+                    <span className="text-2xl">⚙️</span>
+                    <span className="text-sm text-muted-foreground block">Settings</span>
+                  </button>
+                </CardContent>
+              </Card>
             </div>
           </div>
         )}
