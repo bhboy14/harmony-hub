@@ -75,6 +75,27 @@ export const MusicBrowser = ({ onOpenFullLibrary }: MusicBrowserProps) => {
   const playTrack = async (track: Track) => {
     if (track.source === 'spotify' && track.uri && spotify.tokens?.accessToken) {
       try {
+        // First, get available devices and find web player
+        const devicesResponse = await supabase.functions.invoke('spotify-player', {
+          body: {
+            action: 'get_devices',
+            accessToken: spotify.tokens.accessToken,
+          },
+        });
+
+        const devices = devicesResponse.data?.devices || [];
+        const webPlayer = devices.find((d: any) => d.name?.includes('Web Player'));
+        const activeDevice = devices.find((d: any) => d.is_active);
+        const targetDevice = activeDevice || webPlayer || devices[0];
+
+        if (!targetDevice) {
+          // Activate web player if no device found
+          if (spotify.activateWebPlayer) {
+            await spotify.activateWebPlayer();
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for activation
+          }
+        }
+
         // Check if it's a playlist/album (context) or a track
         const isContext = track.uri.includes(':playlist:') || track.uri.includes(':album:');
         
@@ -82,6 +103,7 @@ export const MusicBrowser = ({ onOpenFullLibrary }: MusicBrowserProps) => {
           body: {
             action: 'play',
             accessToken: spotify.tokens.accessToken,
+            deviceId: targetDevice?.id,
             ...(isContext ? { uri: track.uri } : { uris: [track.uri] }),
           },
         });
