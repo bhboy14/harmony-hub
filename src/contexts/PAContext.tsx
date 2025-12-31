@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 interface PAContextType {
   isLive: boolean;
   micVolume: number;
+  audioLevel: number;
   setMicVolume: (volume: number) => void;
   startBroadcast: () => Promise<void>;
   stopBroadcast: () => Promise<void>;
@@ -16,6 +17,7 @@ const PAContext = createContext<PAContextType | null>(null);
 export const PAProvider = ({ children }: { children: ReactNode }) => {
   const [isLive, setIsLive] = useState(false);
   const [micVolume, setMicVolume] = useState(80);
+  const [audioLevel, setAudioLevel] = useState(0);
   const [musicDuckLevel] = useState(20);
   const [fadeInDuration] = useState(2);
   const [fadeOutDuration] = useState(2);
@@ -27,6 +29,8 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
   const preBroadcastVolumeRef = useRef<number>(100);
 
   // Update gain when volume changes
@@ -35,6 +39,38 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       gainNodeRef.current.gain.value = micVolume / 100;
     }
   }, [micVolume]);
+
+  // Audio level monitoring
+  const updateAudioLevel = useCallback(() => {
+    if (!analyserRef.current || !isLive) {
+      setAudioLevel(0);
+      return;
+    }
+
+    const analyser = analyserRef.current;
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+
+    // Calculate average level
+    const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+    const normalizedLevel = Math.min(100, (average / 128) * 100);
+    
+    setAudioLevel(normalizedLevel);
+    animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+  }, [isLive]);
+
+  // Start/stop audio level monitoring
+  useEffect(() => {
+    if (isLive && analyserRef.current) {
+      updateAudioLevel();
+    }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [isLive, updateAudioLevel]);
 
   const startBroadcast = useCallback(async () => {
     try {
@@ -50,11 +86,20 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       mediaStreamRef.current = stream;
       
       const source = audioContext.createMediaStreamSource(stream);
+      
+      // Create analyser for level metering
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+      analyserRef.current = analyser;
+      
       const gainNode = audioContext.createGain();
       gainNode.gain.value = micVolume / 100;
       gainNodeRef.current = gainNode;
       
-      source.connect(gainNode);
+      // Connect: source -> analyser -> gain -> destination
+      source.connect(analyser);
+      analyser.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
       // Duck music if connected
@@ -79,6 +124,12 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   }, [micVolume, autoDuck, spotify, musicDuckLevel, fadeOutDuration, toast]);
 
   const stopBroadcast = useCallback(async () => {
+    // Cancel animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
@@ -88,6 +139,9 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       await audioContextRef.current.close();
       audioContextRef.current = null;
     }
+    
+    analyserRef.current = null;
+    setAudioLevel(0);
     
     if (autoDuck && spotify.isConnected) {
       await spotify.fadeVolume(preBroadcastVolumeRef.current, fadeInDuration * 1000);
@@ -113,6 +167,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       value={{
         isLive,
         micVolume,
+        audioLevel,
         setMicVolume,
         startBroadcast,
         stopBroadcast,
