@@ -1,4 +1,5 @@
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { usePA } from "@/contexts/PAContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -7,6 +8,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   Play, 
   Pause, 
@@ -23,7 +29,9 @@ import {
   Tv,
   Check,
   Globe,
-  RefreshCw
+  RefreshCw,
+  Mic,
+  MicOff
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
@@ -67,6 +75,7 @@ export const PlaybackBar = () => {
     activateWebPlayer,
     connect
   } = useSpotify();
+  const { isLive, toggleBroadcast } = usePA();
   
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(100);
@@ -236,8 +245,30 @@ export const PlaybackBar = () => {
           </div>
         </div>
 
-        {/* Right: Volume & Device */}
+        {/* Right: PA, Volume & Device */}
         <div className="flex items-center justify-end gap-3">
+          {/* PA Mic Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className={`h-8 w-8 ${isLive ? 'text-destructive bg-destructive/10 hover:bg-destructive/20' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={toggleBroadcast}
+                disabled={!canControl}
+              >
+                {isLive ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{isLive ? 'Stop Broadcast' : 'Start PA Broadcast'}</p>
+            </TooltipContent>
+          </Tooltip>
+
           {/* Device Selector Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
