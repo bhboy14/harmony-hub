@@ -75,7 +75,7 @@ export const PlaybackBar = () => {
     activateWebPlayer,
     connect
   } = useSpotify();
-  const { isLive, toggleBroadcast } = usePA();
+  const { isLive, audioLevel, toggleBroadcast } = usePA();
   
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(100);
@@ -268,6 +268,28 @@ export const PlaybackBar = () => {
               <p>{isLive ? 'Stop Broadcast' : 'Start PA Broadcast'}</p>
             </TooltipContent>
           </Tooltip>
+          
+          {/* Audio Level Meter */}
+          {isLive && (
+            <div className="flex items-center gap-0.5 h-6">
+              {[...Array(5)].map((_, i) => {
+                const threshold = (i + 1) * 20;
+                const isActive = audioLevel >= threshold - 10;
+                const barColor = i < 3 ? 'bg-green-500' : i < 4 ? 'bg-yellow-500' : 'bg-red-500';
+                return (
+                  <div
+                    key={i}
+                    className={`w-1 rounded-full transition-all duration-75 ${
+                      isActive ? barColor : 'bg-muted-foreground/30'
+                    }`}
+                    style={{
+                      height: `${12 + i * 3}px`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
 
           {/* Device Selector Dropdown */}
           <DropdownMenu>
