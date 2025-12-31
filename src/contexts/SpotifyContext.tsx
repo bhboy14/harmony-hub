@@ -1,7 +1,39 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Spotify Web Playback SDK type declarations
+declare global {
+  interface Window {
+    Spotify: {
+      Player: new (options: {
+        name: string;
+        getOAuthToken: (cb: (token: string) => void) => void;
+        volume?: number;
+      }) => SpotifyPlayerInstance;
+    };
+    onSpotifyWebPlaybackSDKReady: () => void;
+  }
+}
+
+interface SpotifyPlayerInstance {
+  connect: () => Promise<boolean>;
+  disconnect: () => void;
+  addListener: (event: string, callback: (state: any) => void) => void;
+  removeListener: (event: string, callback?: (state: any) => void) => void;
+  getCurrentState: () => Promise<any>;
+  setName: (name: string) => Promise<void>;
+  getVolume: () => Promise<number>;
+  setVolume: (volume: number) => Promise<void>;
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
+  togglePlay: () => Promise<void>;
+  seek: (position_ms: number) => Promise<void>;
+  previousTrack: () => Promise<void>;
+  nextTrack: () => Promise<void>;
+  activateElement: () => Promise<void>;
+}
 
 interface SpotifyTokens {
   accessToken: string;
@@ -51,6 +83,8 @@ interface SpotifyContextType {
   devices: SpotifyDevice[];
   playlists: SpotifyPlaylist[];
   savedTracks: SpotifyTrack[];
+  webPlayerReady: boolean;
+  webPlayerDeviceId: string | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   play: (uri?: string, uris?: string[]) => Promise<void>;
@@ -63,6 +97,7 @@ interface SpotifyContextType {
   refreshPlaybackState: () => Promise<void>;
   loadPlaylists: () => Promise<void>;
   loadSavedTracks: () => Promise<void>;
+  activateWebPlayer: () => Promise<void>;
 }
 
 const SpotifyContext = createContext<SpotifyContextType | null>(null);
@@ -76,6 +111,10 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [savedTracks, setSavedTracks] = useState<SpotifyTrack[]>([]);
+  const [webPlayerReady, setWebPlayerReady] = useState(false);
+  const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
+  const playerRef = useRef<SpotifyPlayerInstance | null>(null);
+  const sdkLoadedRef = useRef(false);
   const { toast } = useToast();
   const { user, session, isLoading: authLoading } = useAuth();
 
@@ -437,6 +476,145 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setSavedTracks(data?.items?.map((i: any) => i.track) || []);
   }, [callSpotifyApi]);
 
+  // Load Spotify Web Playback SDK
+  useEffect(() => {
+    if (sdkLoadedRef.current) return;
+    
+    const script = document.createElement('script');
+    script.src = 'https://sdk.scdn.co/spotify-player.js';
+    script.async = true;
+    document.body.appendChild(script);
+    sdkLoadedRef.current = true;
+
+    return () => {
+      // Cleanup on unmount
+      if (playerRef.current) {
+        playerRef.current.disconnect();
+      }
+    };
+  }, []);
+
+  // Initialize Web Playback SDK player when tokens are available
+  useEffect(() => {
+    if (!tokens?.accessToken) {
+      if (playerRef.current) {
+        playerRef.current.disconnect();
+        playerRef.current = null;
+        setWebPlayerReady(false);
+        setWebPlayerDeviceId(null);
+      }
+      return;
+    }
+
+    const initPlayer = () => {
+      if (playerRef.current) return; // Already initialized
+
+      const player = new window.Spotify.Player({
+        name: 'Lovable Web Player',
+        getOAuthToken: async (cb) => {
+          const validToken = await ensureValidToken();
+          if (validToken) cb(validToken);
+        },
+        volume: 0.5
+      });
+
+      // Error handling
+      player.addListener('initialization_error', ({ message }) => {
+        console.error('Spotify SDK initialization error:', message);
+        toast({ title: 'Player Error', description: message, variant: 'destructive' });
+      });
+
+      player.addListener('authentication_error', ({ message }) => {
+        console.error('Spotify SDK authentication error:', message);
+        toast({ title: 'Authentication Error', description: 'Please reconnect Spotify', variant: 'destructive' });
+      });
+
+      player.addListener('account_error', ({ message }) => {
+        console.error('Spotify SDK account error:', message);
+        toast({ title: 'Account Error', description: 'Spotify Premium is required for web playback', variant: 'destructive' });
+      });
+
+      player.addListener('playback_error', ({ message }) => {
+        console.error('Spotify SDK playback error:', message);
+      });
+
+      // Ready
+      player.addListener('ready', ({ device_id }) => {
+        console.log('Spotify Web Player ready with Device ID:', device_id);
+        setWebPlayerDeviceId(device_id);
+        setWebPlayerReady(true);
+        toast({ title: 'Web Player Ready', description: 'Browser is now available as a Spotify device' });
+      });
+
+      // Not ready
+      player.addListener('not_ready', ({ device_id }) => {
+        console.log('Spotify Web Player has gone offline:', device_id);
+        setWebPlayerReady(false);
+      });
+
+      // State changed
+      player.addListener('player_state_changed', (state) => {
+        if (!state) return;
+        
+        const currentTrack = state.track_window?.current_track;
+        if (currentTrack) {
+          setPlaybackState({
+            isPlaying: !state.paused,
+            track: {
+              id: currentTrack.id,
+              name: currentTrack.name,
+              artists: currentTrack.artists,
+              album: {
+                name: currentTrack.album.name,
+                images: currentTrack.album.images
+              },
+              duration_ms: currentTrack.duration_ms,
+              uri: currentTrack.uri
+            },
+            progress: state.position,
+            volume: 100, // Will be updated separately
+            device: {
+              id: webPlayerDeviceId || '',
+              name: 'Lovable Web Player',
+              type: 'Computer'
+            }
+          });
+        }
+      });
+
+      player.connect().then((success) => {
+        if (success) {
+          console.log('Spotify Web Playback SDK connected successfully');
+        }
+      });
+
+      playerRef.current = player;
+    };
+
+    // Check if SDK is already loaded
+    if (window.Spotify) {
+      initPlayer();
+    } else {
+      window.onSpotifyWebPlaybackSDKReady = initPlayer;
+    }
+  }, [tokens?.accessToken, ensureValidToken, toast, webPlayerDeviceId]);
+
+  // Activate the web player (transfer playback to browser)
+  const activateWebPlayer = useCallback(async () => {
+    if (!webPlayerDeviceId) {
+      toast({ title: 'Web Player not ready', description: 'Please wait for the player to initialize', variant: 'destructive' });
+      return;
+    }
+    
+    // Activate the player element (required for autoplay)
+    if (playerRef.current) {
+      await playerRef.current.activateElement();
+    }
+    
+    await transferPlayback(webPlayerDeviceId);
+    toast({ title: 'Web Player Active', description: 'Now playing through browser. Use system AirPlay/Cast to stream.' });
+  }, [webPlayerDeviceId, transferPlayback, toast]);
+
   return (
     <SpotifyContext.Provider
       value={{
@@ -447,6 +625,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         devices,
         playlists,
         savedTracks,
+        webPlayerReady,
+        webPlayerDeviceId,
         connect,
         disconnect,
         play,
@@ -459,6 +639,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         refreshPlaybackState,
         loadPlaylists,
         loadSavedTracks,
+        activateWebPlayer,
       }}
     >
       {children}

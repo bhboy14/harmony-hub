@@ -21,7 +21,9 @@ import {
   Smartphone,
   Speaker,
   Tv,
-  Check
+  Check,
+  Globe,
+  RefreshCw
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
@@ -53,12 +55,16 @@ export const PlaybackBar = () => {
     isConnected, 
     playbackState, 
     devices,
+    webPlayerReady,
+    webPlayerDeviceId,
     play, 
     pause, 
     next, 
     previous, 
     setVolume,
     transferPlayback,
+    refreshPlaybackState,
+    activateWebPlayer,
     connect
   } = useSpotify();
   
@@ -253,20 +259,70 @@ export const PlaybackBar = () => {
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               align="end" 
-              className="w-64 bg-popover border border-border shadow-lg z-[60]"
+              className="w-72 bg-popover border border-border shadow-lg z-[60]"
               sideOffset={8}
             >
-              <div className="px-3 py-2 border-b border-border">
-                <p className="text-sm font-medium text-foreground">Connect to a device</p>
-                <p className="text-xs text-muted-foreground">Select a device to play on</p>
+              <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Connect to a device</p>
+                  <p className="text-xs text-muted-foreground">Select a device to play on</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    refreshPlaybackState();
+                  }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
               </div>
+              
+              {/* Web Player Option */}
+              {webPlayerReady && webPlayerDeviceId && (
+                <div className="border-b border-border">
+                  <DropdownMenuItem 
+                    onClick={() => activateWebPlayer()}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer ${
+                      playbackState?.device?.name === 'Lovable Web Player' ? 'bg-[#1DB954]/10' : ''
+                    }`}
+                  >
+                    <Globe className={`h-5 w-5 ${
+                      playbackState?.device?.name === 'Lovable Web Player' ? 'text-[#1DB954]' : 'text-muted-foreground'
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm truncate ${
+                        playbackState?.device?.name === 'Lovable Web Player' ? 'text-[#1DB954] font-medium' : 'text-foreground'
+                      }`}>
+                        This Browser
+                      </p>
+                      <p className="text-xs text-muted-foreground">Cast via AirPlay / Chromecast</p>
+                    </div>
+                    {playbackState?.device?.name === 'Lovable Web Player' && (
+                      <Check className="h-4 w-4 text-[#1DB954]" />
+                    )}
+                  </DropdownMenuItem>
+                </div>
+              )}
+              
+              {!webPlayerReady && (
+                <div className="px-3 py-2 border-b border-border bg-muted/30">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Web player initializing...</span>
+                  </div>
+                </div>
+              )}
+              
               {devices.length === 0 ? (
                 <div className="px-3 py-4 text-center">
-                  <p className="text-sm text-muted-foreground">No devices found</p>
+                  <p className="text-sm text-muted-foreground">No other devices found</p>
                   <p className="text-xs text-muted-foreground mt-1">Open Spotify on a device</p>
                 </div>
               ) : (
-                devices.map((device) => {
+                devices.filter(d => d.name !== 'Lovable Web Player').map((device) => {
                   const DeviceIcon = getDeviceIcon(device.type);
                   const isActive = device.is_active;
                   return (
