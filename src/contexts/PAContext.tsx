@@ -102,10 +102,14 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       analyser.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
-      // Duck music if connected
+      // Duck music if connected and playing
       if (autoDuck && spotify.isConnected && spotify.playbackState?.isPlaying) {
         preBroadcastVolumeRef.current = spotify.playbackState.volume || 100;
-        await spotify.fadeVolume(musicDuckLevel, fadeOutDuration * 1000);
+        try {
+          await spotify.fadeVolume(musicDuckLevel, fadeOutDuration * 1000);
+        } catch (err) {
+          console.warn('Could not duck music volume:', err);
+        }
       }
       
       setIsLive(true);
@@ -143,8 +147,13 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
     analyserRef.current = null;
     setAudioLevel(0);
     
+    // Restore music volume - wrap in try/catch since device may not be active
     if (autoDuck && spotify.isConnected) {
-      await spotify.fadeVolume(preBroadcastVolumeRef.current, fadeInDuration * 1000);
+      try {
+        await spotify.fadeVolume(preBroadcastVolumeRef.current, fadeInDuration * 1000);
+      } catch (err) {
+        console.warn('Could not restore music volume:', err);
+      }
     }
     
     setIsLive(false);
