@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/Sidebar";
-import { PrayerTimesCompact } from "@/components/PrayerTimesCompact";
-import { QuickLibrary } from "@/components/QuickLibrary";
+import { Header } from "@/components/Header";
+import { MusicBrowser } from "@/components/MusicBrowser";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
 import { MediaLibrary } from "@/components/MediaLibrary";
@@ -102,67 +102,68 @@ const Index = () => {
     <div className="min-h-screen bg-background pb-20">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <main className="ml-64 p-8">
-        {activeTab === "dashboard" && (
-          <div className="space-y-8 animate-fade-in">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground mt-1">Your space, your sound, seamlessly integrated</p>
-            </div>
+      <div className="ml-64 flex flex-col min-h-screen">
+        {/* Prayer Times Header */}
+        <Header 
+          prayerTimes={prayerTimes} 
+          nextPrayer={nextPrayer} 
+          timeUntilNext={timeUntilNext} 
+        />
 
-            {/* Prayer Times - Compact Top Bar */}
-            <PrayerTimesCompact 
-              prayerTimes={prayerTimes} 
-              nextPrayer={nextPrayer} 
-              timeUntilNext={timeUntilNext} 
-            />
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Quick Library - Takes 2 columns */}
-              <div className="lg:col-span-2">
-                <QuickLibrary onOpenFullLibrary={() => setActiveTab("library")} />
+        <main className="flex-1 p-8">
+          {activeTab === "dashboard" && (
+            <div className="space-y-6 animate-fade-in">
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+                <p className="text-muted-foreground mt-1">Your space, your sound, seamlessly integrated</p>
               </div>
 
-              {/* Quick Actions */}
-              <Card className="glass-panel">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => setActiveTab("azan")}
-                    className="p-4 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all text-left"
-                  >
-                    <span className="font-arabic text-2xl text-accent block">الأذان</span>
-                    <span className="text-sm text-muted-foreground">Play Azan</span>
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab("pa")}
-                    className="p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 transition-all text-left"
-                  >
-                    <span className="text-2xl">📢</span>
-                    <span className="text-sm text-muted-foreground block">Announcement</span>
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab("library")}
-                    className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                  >
-                    <span className="text-2xl">🎵</span>
-                    <span className="text-sm text-muted-foreground block">Full Library</span>
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab("settings")}
-                    className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                  >
-                    <span className="text-2xl">⚙️</span>
-                    <span className="text-sm text-muted-foreground block">Settings</span>
-                  </button>
-                </CardContent>
-              </Card>
+              {/* Main Content Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Music Browser - Takes 2 columns */}
+                <div className="lg:col-span-2">
+                  <MusicBrowser onOpenFullLibrary={() => setActiveTab("library")} />
+                </div>
+
+                {/* Quick Actions */}
+                <Card className="glass-panel">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setActiveTab("azan")}
+                      className="p-4 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all text-left"
+                    >
+                      <span className="font-arabic text-2xl text-accent block">الأذان</span>
+                      <span className="text-sm text-muted-foreground">Play Azan</span>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab("pa")}
+                      className="p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 transition-all text-left"
+                    >
+                      <span className="text-2xl">📢</span>
+                      <span className="text-sm text-muted-foreground block">Announcement</span>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab("library")}
+                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
+                    >
+                      <span className="text-2xl">🎵</span>
+                      <span className="text-sm text-muted-foreground block">Full Library</span>
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab("settings")}
+                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
+                    >
+                      <span className="text-2xl">⚙️</span>
+                      <span className="text-sm text-muted-foreground block">Settings</span>
+                    </button>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {activeTab === "library" && (
           <div className="animate-fade-in">
@@ -286,7 +287,8 @@ const Index = () => {
             <SettingsPanel />
           </div>
         )}
-      </main>
+        </main>
+      </div>
       
       <PlaybackBar />
     </div>
