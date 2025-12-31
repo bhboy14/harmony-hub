@@ -13,9 +13,10 @@ import { AdminPanel } from "@/components/AdminPanel";
 import { PlaybackBar } from "@/components/PlaybackBar";
 import { RoleGate } from "@/components/RoleGate";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
-import { useMediaLibrary } from "@/hooks/useMediaLibrary";
+import { useMediaLibrary, Track } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler, PostAzanAction } from "@/hooks/useAzanScheduler";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,6 +37,7 @@ const Index = () => {
   const { prayerTimes, nextPrayer, timeUntilNext } = usePrayerTimes();
   const mediaLibrary = useMediaLibrary();
   const spotify = useSpotify();
+  const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
 
   // Azan scheduler integration with Spotify - hooks must be called before any early returns
@@ -190,7 +192,33 @@ const Index = () => {
                 <YouTubePlayer />
               </TabsContent>
               <TabsContent value="local" className="h-[calc(100vh-12rem)]">
-                <MediaLibrary {...mediaLibrary} />
+                <MediaLibrary 
+                  {...mediaLibrary} 
+                  playTrack={(track: Track) => {
+                    unifiedAudio.playLocalTrack({
+                      id: track.id,
+                      title: track.title,
+                      artist: track.artist,
+                      duration: track.duration,
+                      fileHandle: track.fileHandle,
+                      url: track.url,
+                      albumArt: track.albumArt,
+                    });
+                  }}
+                  currentTrack={unifiedAudio.activeSource === 'local' && unifiedAudio.currentTrack ? {
+                    id: unifiedAudio.currentTrack.id,
+                    title: unifiedAudio.currentTrack.title,
+                    artist: unifiedAudio.currentTrack.artist,
+                    duration: mediaLibrary.currentTrack?.duration || '0:00',
+                    source: 'local',
+                    albumArt: unifiedAudio.currentTrack.albumArt,
+                  } : null}
+                  isPlaying={unifiedAudio.activeSource === 'local' && unifiedAudio.isPlaying}
+                  pauseTrack={() => unifiedAudio.pause()}
+                  resumeTrack={() => unifiedAudio.play()}
+                  volume={unifiedAudio.volume}
+                  setVolume={(v) => unifiedAudio.setVolume(v)}
+                />
               </TabsContent>
             </Tabs>
           </div>
