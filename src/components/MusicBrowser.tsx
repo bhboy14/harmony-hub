@@ -75,11 +75,14 @@ export const MusicBrowser = ({ onOpenFullLibrary }: MusicBrowserProps) => {
   const playTrack = async (track: Track) => {
     if (track.source === 'spotify' && track.uri && spotify.tokens?.accessToken) {
       try {
+        // Check if it's a playlist/album (context) or a track
+        const isContext = track.uri.includes(':playlist:') || track.uri.includes(':album:');
+        
         await supabase.functions.invoke('spotify-player', {
           body: {
             action: 'play',
             accessToken: spotify.tokens.accessToken,
-            uris: [track.uri],
+            ...(isContext ? { uri: track.uri } : { uris: [track.uri] }),
           },
         });
         spotify.refreshPlaybackState();
