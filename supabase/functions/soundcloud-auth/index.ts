@@ -107,14 +107,12 @@ serve(async (req) => {
     }
 
     if (action === "get_auth_url") {
-      // Generate SoundCloud authorization URL
-      const scopes = "non-expiring";
-      
+      // Generate SoundCloud authorization URL - use empty scope as SoundCloud no longer allows non-expiring tokens
       const authUrl = new URL("https://api.soundcloud.com/connect");
       authUrl.searchParams.append("client_id", SOUNDCLOUD_CLIENT_ID);
       authUrl.searchParams.append("response_type", "code");
       authUrl.searchParams.append("redirect_uri", redirectUri);
-      authUrl.searchParams.append("scope", scopes);
+      // Empty scope as per SoundCloud API requirements
 
       return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
