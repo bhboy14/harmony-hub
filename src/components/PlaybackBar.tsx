@@ -76,8 +76,6 @@ export const PlaybackBar = () => {
   const spotify = useSpotify();
   const { isLive, audioLevel, toggleBroadcast } = usePA();
   
-  const [isMuted, setIsMuted] = useState(false);
-  const [previousVolume, setPreviousVolume] = useState(100);
   const [queueOpen, setQueueOpen] = useState(false);
   
   const canControl = hasPermission('dj');
@@ -89,6 +87,8 @@ export const PlaybackBar = () => {
     progress,
     duration,
     volume,
+    isMuted,
+    isLoading,
     play,
     pause,
     next,
@@ -105,6 +105,8 @@ export const PlaybackBar = () => {
     playQueueTrack,
     toggleShuffle,
     toggleRepeat,
+    setGlobalVolume,
+    toggleMute,
   } = unified;
 
   const { 
@@ -136,21 +138,12 @@ export const PlaybackBar = () => {
 
   const handleVolumeChange = async (value: number[]) => {
     if (!canControl) return;
-    const newVolume = value[0];
-    setIsMuted(newVolume === 0);
-    await unified.setVolume(newVolume);
+    await setGlobalVolume(value[0]);
   };
 
-  const toggleMute = async () => {
+  const handleToggleMute = async () => {
     if (!canControl) return;
-    if (isMuted) {
-      await unified.setVolume(previousVolume);
-      setIsMuted(false);
-    } else {
-      setPreviousVolume(volume);
-      await unified.setVolume(0);
-      setIsMuted(true);
-    }
+    await toggleMute();
   };
 
   const handleSeek = async (value: number[]) => {
@@ -416,7 +409,7 @@ export const PlaybackBar = () => {
               variant="ghost" 
               size="icon" 
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={toggleMute}
+              onClick={handleToggleMute}
               disabled={!canControl}
             >
               <VolumeIcon className="h-4 w-4" />
