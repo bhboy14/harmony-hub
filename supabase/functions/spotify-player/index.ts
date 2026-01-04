@@ -169,6 +169,12 @@ serve(async (req) => {
         data = await safeParseResponse(response);
         break;
 
+      case "get_recently_played":
+        console.log("Getting recently played tracks");
+        response = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=20", { headers });
+        data = await safeParseResponse(response);
+        break;
+
       case "transfer":
         console.log("Transferring playback to device", deviceId);
         response = await fetch("https://api.spotify.com/v1/me/player", {

@@ -215,8 +215,64 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         </div>
       </div>
 
-      {/* Recently Played Section */}
+      {/* Local Recently Played Section */}
       <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
+
+      {/* Spotify Recently Played Section */}
+      {spotify.isConnected && spotify.recentlyPlayed.length > 0 && (
+        <section className="px-6 py-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-foreground hover:underline cursor-pointer flex items-center gap-2">
+              <SpotifyIcon />
+              Recently Played on Spotify
+            </h2>
+            <button 
+              onClick={() => spotify.loadRecentlyPlayed()}
+              className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+          
+          {/* Horizontal Scrolling Container */}
+          <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
+            {spotify.recentlyPlayed.map((item: any, index: number) => (
+              <div
+                key={`${item.track.id}-${index}`}
+                className="flex-shrink-0 w-44 group cursor-pointer"
+                onClick={() => spotify.play(undefined, [item.track.uri])}
+              >
+                <div className="relative mb-3">
+                  <div className="aspect-square rounded-lg overflow-hidden shadow-lg bg-secondary">
+                    {item.track.album?.images?.[0]?.url ? (
+                      <img 
+                        src={item.track.album.images[0].url} 
+                        alt={item.track.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
+                        <SpotifyIcon />
+                      </div>
+                    )}
+                  </div>
+                  {/* Play Button */}
+                  <Button
+                    size="icon"
+                    className="absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-2xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-105"
+                  >
+                    <Play className="h-6 w-6 fill-current ml-0.5" />
+                  </Button>
+                </div>
+                <h3 className="font-semibold text-foreground truncate text-sm">{item.track.name}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
+                  {item.track.artists?.map((a: any) => a.name).join(", ")}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Made For You Section - Horizontal Scroll */}
       {madeForYou.length > 0 && (
