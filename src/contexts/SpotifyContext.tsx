@@ -83,6 +83,8 @@ interface SpotifyRecentlyPlayedItem {
 interface SpotifyContextType {
   isConnected: boolean;
   isLoading: boolean;
+  isPlayerReady: boolean; // True when SDK is ready and device is active
+  isPlayerConnecting: boolean; // True when attempting to connect SDK
   tokens: SpotifyTokens | null;
   playbackState: SpotifyPlaybackState | null;
   devices: SpotifyDevice[];
@@ -105,6 +107,7 @@ interface SpotifyContextType {
   loadSavedTracks: () => Promise<void>;
   loadRecentlyPlayed: () => Promise<void>;
   activateWebPlayer: () => Promise<void>;
+  reinitializePlayer: () => Promise<void>;
 }
 
 const SpotifyContext = createContext<SpotifyContextType | null>(null);
@@ -114,6 +117,8 @@ const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/
 export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [tokens, setTokens] = useState<SpotifyTokens | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const [isPlayerConnecting, setIsPlayerConnecting] = useState(false);
   const [playbackState, setPlaybackState] = useState<SpotifyPlaybackState | null>(null);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
@@ -123,6 +128,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
   const sdkLoadedRef = useRef(false);
+  const autoTransferAttemptedRef = useRef(false);
   const { toast } = useToast();
   const { user, session, isLoading: authLoading } = useAuth();
 
@@ -433,8 +439,26 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     loadUserData();
   }, [tokens, callSpotifyApi]);
 
+  // Forward declaration reference for reinitializePlayer
+  const reinitializePlayerRef = useRef<(() => Promise<void>) | null>(null);
+
   const play = useCallback(async (uri?: string, uris?: string[]) => {
-    // Get current devices to find an active one or select first available
+    // First, try to use our web player if ready
+    if (webPlayerReady && webPlayerDeviceId) {
+      try {
+        // Activate the player element first (required for autoplay)
+        if (playerRef.current) {
+          await playerRef.current.activateElement();
+        }
+        await callSpotifyApi("play", { uri, uris, deviceId: webPlayerDeviceId });
+        setTimeout(refreshPlaybackState, 500);
+        return;
+      } catch (error) {
+        console.error("Web player play failed, trying other devices:", error);
+      }
+    }
+
+    // If web player isn't ready, check for other devices
     const deviceList = await callSpotifyApi("get_devices");
     const availableDevices = deviceList?.devices || [];
     
@@ -444,6 +468,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     
     if (activeDevice) {
       targetDeviceId = activeDevice.id;
+    } else if (webPlayerDeviceId && webPlayerReady) {
+      // Use web player as fallback
+      targetDeviceId = webPlayerDeviceId;
     } else if (availableDevices.length > 0) {
       // No active device, transfer to first available device
       targetDeviceId = availableDevices[0].id;
@@ -452,17 +479,22 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         description: `Starting playback on ${availableDevices[0].name}` 
       });
     } else {
+      // No devices available - show connecting message and try to reinitialize
       toast({ 
-        title: "No devices available", 
-        description: "Open Spotify on a device first (phone, computer, or speaker)", 
-        variant: "destructive" 
+        title: "Connecting to Spotify Player...", 
+        description: "Initializing browser player, please wait" 
       });
+      
+      // Attempt to reinitialize the player via ref
+      if (reinitializePlayerRef.current) {
+        await reinitializePlayerRef.current();
+      }
       return;
     }
 
     await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState, toast]);
+  }, [callSpotifyApi, refreshPlaybackState, toast, webPlayerReady, webPlayerDeviceId]);
 
   const pause = useCallback(async () => {
     await callSpotifyApi("pause");
@@ -535,6 +567,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       // Cleanup on unmount
       if (playerRef.current) {
         playerRef.current.disconnect();
+        setIsPlayerReady(false);
+        setIsPlayerConnecting(false);
       }
     };
   }, []);
@@ -547,12 +581,18 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         playerRef.current = null;
         setWebPlayerReady(false);
         setWebPlayerDeviceId(null);
+        setIsPlayerReady(false);
+        setIsPlayerConnecting(false);
       }
+      autoTransferAttemptedRef.current = false;
       return;
     }
 
     const initPlayer = () => {
       if (playerRef.current) return; // Already initialized
+
+      setIsPlayerConnecting(true);
+      console.log('Initializing Spotify Web Player...');
 
       const player = new window.Spotify.Player({
         name: 'Lovable Web Player',
@@ -566,16 +606,22 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       // Error handling
       player.addListener('initialization_error', ({ message }) => {
         console.error('Spotify SDK initialization error:', message);
+        setIsPlayerConnecting(false);
+        setIsPlayerReady(false);
         toast({ title: 'Player Error', description: message, variant: 'destructive' });
       });
 
       player.addListener('authentication_error', ({ message }) => {
         console.error('Spotify SDK authentication error:', message);
+        setIsPlayerConnecting(false);
+        setIsPlayerReady(false);
         toast({ title: 'Authentication Error', description: 'Please reconnect Spotify', variant: 'destructive' });
       });
 
       player.addListener('account_error', ({ message }) => {
         console.error('Spotify SDK account error:', message);
+        setIsPlayerConnecting(false);
+        setIsPlayerReady(false);
         toast({ title: 'Account Error', description: 'Spotify Premium is required for web playback', variant: 'destructive' });
       });
 
@@ -583,18 +629,39 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         console.error('Spotify SDK playback error:', message);
       });
 
-      // Ready
-      player.addListener('ready', ({ device_id }) => {
+      // Ready - Auto-transfer playback to this device
+      player.addListener('ready', async ({ device_id }) => {
         console.log('Spotify Web Player ready with Device ID:', device_id);
         setWebPlayerDeviceId(device_id);
         setWebPlayerReady(true);
-        toast({ title: 'Web Player Ready', description: 'Browser is now available as a Spotify device' });
+        setIsPlayerConnecting(false);
+        
+        // Auto-transfer playback to this device once on first ready
+        if (!autoTransferAttemptedRef.current && device_id) {
+          autoTransferAttemptedRef.current = true;
+          try {
+            console.log('Auto-transferring playback to web player...');
+            // Activate the player element first
+            await player.activateElement();
+            await callSpotifyApi("transfer", { deviceId: device_id });
+            setIsPlayerReady(true);
+            toast({ title: 'Spotify Player Ready', description: 'Browser is now your active playback device' });
+          } catch (error) {
+            console.error('Auto-transfer failed:', error);
+            // Still mark as ready even if transfer fails - user can manually transfer
+            setIsPlayerReady(true);
+            toast({ title: 'Web Player Ready', description: 'Browser is available as a Spotify device' });
+          }
+        } else {
+          setIsPlayerReady(true);
+        }
       });
 
       // Not ready
       player.addListener('not_ready', ({ device_id }) => {
         console.log('Spotify Web Player has gone offline:', device_id);
         setWebPlayerReady(false);
+        setIsPlayerReady(false);
       });
 
       // State changed
@@ -630,6 +697,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       player.connect().then((success) => {
         if (success) {
           console.log('Spotify Web Playback SDK connected successfully');
+        } else {
+          console.error('Spotify Web Playback SDK failed to connect');
+          setIsPlayerConnecting(false);
         }
       });
 
@@ -642,7 +712,131 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     } else {
       window.onSpotifyWebPlaybackSDKReady = initPlayer;
     }
-  }, [tokens?.accessToken, ensureValidToken, toast, webPlayerDeviceId]);
+  }, [tokens?.accessToken, ensureValidToken, toast, callSpotifyApi, webPlayerDeviceId]);
+
+  // Reinitialize player (for recovery from errors)
+  const reinitializePlayer = useCallback(async () => {
+    console.log('Reinitializing Spotify Web Player...');
+    setIsPlayerConnecting(true);
+    
+    // Disconnect existing player
+    if (playerRef.current) {
+      playerRef.current.disconnect();
+      playerRef.current = null;
+    }
+    
+    setWebPlayerReady(false);
+    setWebPlayerDeviceId(null);
+    setIsPlayerReady(false);
+    autoTransferAttemptedRef.current = false;
+    
+    // Wait a moment before reinitializing
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    if (!tokens?.accessToken || !window.Spotify) {
+      setIsPlayerConnecting(false);
+      toast({ 
+        title: 'Player Unavailable', 
+        description: 'Please refresh the page and reconnect Spotify', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+    
+    const player = new window.Spotify.Player({
+      name: 'Lovable Web Player',
+      getOAuthToken: async (cb) => {
+        const validToken = await ensureValidToken();
+        if (validToken) cb(validToken);
+      },
+      volume: 0.5
+    });
+
+    player.addListener('initialization_error', ({ message }) => {
+      console.error('Spotify SDK reinitialization error:', message);
+      setIsPlayerConnecting(false);
+      toast({ title: 'Player Error', description: message, variant: 'destructive' });
+    });
+
+    player.addListener('authentication_error', ({ message }) => {
+      console.error('Spotify SDK authentication error:', message);
+      setIsPlayerConnecting(false);
+      toast({ title: 'Authentication Error', description: 'Please reconnect Spotify', variant: 'destructive' });
+    });
+
+    player.addListener('account_error', ({ message }) => {
+      console.error('Spotify SDK account error:', message);
+      setIsPlayerConnecting(false);
+      toast({ title: 'Account Error', description: 'Spotify Premium is required', variant: 'destructive' });
+    });
+
+    player.addListener('playback_error', ({ message }) => {
+      console.error('Spotify SDK playback error:', message);
+    });
+
+    player.addListener('ready', async ({ device_id }) => {
+      console.log('Spotify Web Player reinitialized with Device ID:', device_id);
+      setWebPlayerDeviceId(device_id);
+      setWebPlayerReady(true);
+      setIsPlayerConnecting(false);
+      
+      try {
+        await player.activateElement();
+        await callSpotifyApi("transfer", { deviceId: device_id });
+        setIsPlayerReady(true);
+        toast({ title: 'Spotify Player Reconnected', description: 'Ready to play' });
+      } catch (error) {
+        console.error('Transfer after reinit failed:', error);
+        setIsPlayerReady(true);
+      }
+    });
+
+    player.addListener('not_ready', ({ device_id }) => {
+      console.log('Spotify Web Player offline:', device_id);
+      setWebPlayerReady(false);
+      setIsPlayerReady(false);
+    });
+
+    player.addListener('player_state_changed', (state) => {
+      if (!state) return;
+      const currentTrack = state.track_window?.current_track;
+      if (currentTrack) {
+        setPlaybackState({
+          isPlaying: !state.paused,
+          track: {
+            id: currentTrack.id,
+            name: currentTrack.name,
+            artists: currentTrack.artists,
+            album: {
+              name: currentTrack.album.name,
+              images: currentTrack.album.images
+            },
+            duration_ms: currentTrack.duration_ms,
+            uri: currentTrack.uri
+          },
+          progress: state.position,
+          volume: 100,
+          device: {
+            id: webPlayerDeviceId || '',
+            name: 'Lovable Web Player',
+            type: 'Computer'
+          }
+        });
+      }
+    });
+
+    player.connect().then((success) => {
+      if (!success) {
+        setIsPlayerConnecting(false);
+        toast({ title: 'Connection Failed', description: 'Could not connect to Spotify', variant: 'destructive' });
+      }
+    });
+
+    playerRef.current = player;
+  }, [tokens?.accessToken, ensureValidToken, toast, callSpotifyApi, webPlayerDeviceId]);
+
+  // Update ref for forward reference
+  reinitializePlayerRef.current = reinitializePlayer;
 
   // Activate the web player (transfer playback to browser)
   const activateWebPlayer = useCallback(async () => {
@@ -657,6 +851,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
     
     await transferPlayback(webPlayerDeviceId);
+    setIsPlayerReady(true);
     toast({ title: 'Web Player Active', description: 'Now playing through browser. Use system AirPlay/Cast to stream.' });
   }, [webPlayerDeviceId, transferPlayback, toast]);
 
@@ -665,6 +860,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       value={{
         isConnected: !!tokens,
         isLoading,
+        isPlayerReady,
+        isPlayerConnecting,
         tokens,
         playbackState,
         devices,
@@ -687,6 +884,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         loadSavedTracks,
         loadRecentlyPlayed,
         activateWebPlayer,
+        reinitializePlayer,
       }}
     >
       {children}
