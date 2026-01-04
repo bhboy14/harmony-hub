@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Play, Pause, Trash2, Music, Search, Filter, Loader2 } from "lucide-react";
+import { Play, Pause, Trash2, Music, Search, Filter, Loader2, ListPlus, ListEnd } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUnifiedLibrary, UnifiedTrack } from "@/hooks/useUnifiedLibrary";
 import { LocalUploader } from "@/components/LocalUploader";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
+import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +20,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
 
 interface UnifiedLibraryProps {
   onOpenSpotify?: () => void;
@@ -29,8 +37,9 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
   const { tracks, isLoading, deleteTrack, loadTracks } = useUnifiedLibrary();
   const unifiedAudio = useUnifiedAudio();
   const spotify = useSpotify();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'spotify' | 'youtube' | 'local'>('all');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'spotify' | 'youtube' | 'local' | 'soundcloud'>('all');
 
   // Filter tracks
   const filteredTracks = tracks.filter(track => {
@@ -81,6 +90,33 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const addTrackToQueue = (track: UnifiedTrack, playNext: boolean = false) => {
+    const queueTrack = {
+      id: track.id,
+      title: track.title,
+      artist: track.artist || 'Unknown Artist',
+      albumArt: track.albumArt || undefined,
+      duration: track.durationMs || 0,
+      source: track.source as AudioSource,
+      externalId: track.externalId || undefined,
+      url: track.localUrl || undefined,
+    };
+
+    if (playNext) {
+      unifiedAudio.playNext(queueTrack);
+      toast({
+        title: "Playing next",
+        description: `"${track.title}" will play next`,
+      });
+    } else {
+      unifiedAudio.addToQueue(queueTrack);
+      toast({
+        title: "Added to queue",
+        description: `"${track.title}" added to queue`,
+      });
+    }
   };
 
   return (
@@ -226,6 +262,30 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
                   <span className="text-sm text-muted-foreground">
                     {formatDuration(track.durationMs)}
                   </span>
+
+                  {/* Queue Actions */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => addTrackToQueue(track, true)}>
+                        <ListPlus className="h-4 w-4 mr-2" />
+                        Play Next
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => addTrackToQueue(track, false)}>
+                        <ListEnd className="h-4 w-4 mr-2" />
+                        Add to Queue
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
                   {/* Delete Button */}
                   <AlertDialog>
