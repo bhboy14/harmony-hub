@@ -112,38 +112,82 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [volume]);
 
-  // Load tokens from localStorage on mount
+  // Load tokens from database on mount
   useEffect(() => {
-    if (!user) {
-      setTokens(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const stored = localStorage.getItem(`soundcloud_tokens_${user.id}`);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setTokens(parsed);
-      } catch (e) {
-        console.error("Failed to parse SoundCloud tokens:", e);
+    const loadTokensFromDb = async () => {
+      if (!user) {
+        setTokens(null);
+        setIsLoading(false);
+        return;
       }
+
+      try {
+        const { data, error } = await supabase
+          .from('user_api_tokens')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('provider', 'soundcloud')
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error loading SoundCloud tokens:', error);
+        } else if (data) {
+          setTokens({
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token || '',
+            expiresAt: data.expires_at ? new Date(data.expires_at).getTime() : 0,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load SoundCloud tokens:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTokensFromDb();
+  }, [user]);
+
+  // Save tokens to database
+  const saveTokensToDb = useCallback(async (newTokens: SoundCloudTokens) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_api_tokens')
+        .upsert({
+          user_id: user.id,
+          provider: 'soundcloud',
+          access_token: newTokens.accessToken,
+          refresh_token: newTokens.refreshToken || null,
+          expires_at: newTokens.expiresAt ? new Date(newTokens.expiresAt).toISOString() : null,
+        }, { onConflict: 'user_id,provider' });
+
+      if (error) {
+        console.error('Error saving SoundCloud tokens:', error);
+      }
+    } catch (err) {
+      console.error('Failed to save SoundCloud tokens:', err);
     }
-    setIsLoading(false);
   }, [user]);
 
-  // Save tokens to localStorage
-  const saveTokens = useCallback((newTokens: SoundCloudTokens) => {
+  // Delete tokens from database
+  const deleteTokensFromDb = useCallback(async () => {
     if (!user) return;
-    localStorage.setItem(`soundcloud_tokens_${user.id}`, JSON.stringify(newTokens));
-    setTokens(newTokens);
-  }, [user]);
 
-  // Delete tokens
-  const deleteTokens = useCallback(() => {
-    if (!user) return;
-    localStorage.removeItem(`soundcloud_tokens_${user.id}`);
-    setTokens(null);
+    try {
+      const { error } = await supabase
+        .from('user_api_tokens')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('provider', 'soundcloud');
+
+      if (error) {
+        console.error('Error deleting SoundCloud tokens:', error);
+      }
+    } catch (err) {
+      console.error('Failed to delete SoundCloud tokens:', err);
+    }
   }, [user]);
 
   // Ensure valid token
@@ -169,20 +213,38 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
           refreshToken: data.refresh_token || tokens.refreshToken,
           expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : 0,
         };
-        saveTokens(newTokens);
+        setTokens(newTokens);
+        await saveTokensToDb(newTokens);
         return newTokens.accessToken;
       } catch (error) {
         console.error("Token refresh failed:", error);
-        deleteTokens();
+        setTokens(null);
+        await deleteTokensFromDb();
         toast({ title: "SoundCloud session expired", description: "Please reconnect.", variant: "destructive" });
         return null;
       }
     }
 
     return tokens.accessToken;
-  }, [tokens, session?.access_token, toast, saveTokens, deleteTokens]);
+  }, [tokens, session?.access_token, toast, saveTokensToDb, deleteTokensFromDb]);
 
+  // Call SoundCloud API via Edge Function proxy (token never touches client)
   const callSoundCloudApi = useCallback(async (action: string, params: Record<string, any> = {}) => {
+    if (!session?.access_token) throw new Error("Not authenticated");
+
+    // For actions that don't require the access token in request (proxy handles it)
+    const { data, error } = await supabase.functions.invoke("soundcloud-proxy", {
+      body: { action, ...params },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }, [session?.access_token]);
+
+  // Legacy API call for backward compatibility during transition
+  const callSoundCloudApiLegacy = useCallback(async (action: string, params: Record<string, any> = {}) => {
     const accessToken = await ensureValidToken();
     if (!accessToken) throw new Error("Not connected to SoundCloud");
 
@@ -205,7 +267,7 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
 
     const loadUser = async () => {
       try {
-        const userData = await callSoundCloudApi("get_me");
+        const userData = await callSoundCloudApiLegacy("get_me");
         setScUser(userData);
       } catch (error) {
         console.error("Failed to load SoundCloud user:", error);
@@ -213,7 +275,7 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
     };
 
     loadUser();
-  }, [tokens, callSoundCloudApi]);
+  }, [tokens, callSoundCloudApiLegacy]);
 
   const connect = useCallback(async () => {
     setIsLoading(true);
@@ -276,7 +338,8 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
             refreshToken: data.refresh_token || "",
             expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : 0,
           };
-          saveTokens(newTokens);
+          setTokens(newTokens);
+          await saveTokensToDb(newTokens);
           toast({ title: "Connected to SoundCloud", description: "Your SoundCloud account is now linked." });
         } catch (error) {
           console.error("Token exchange error:", error);
@@ -289,10 +352,11 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [toast, saveTokens, authLoading, session?.access_token]);
+  }, [toast, saveTokensToDb, authLoading, session?.access_token]);
 
   const disconnect = useCallback(async () => {
-    deleteTokens();
+    await deleteTokensFromDb();
+    setTokens(null);
     setScUser(null);
     setPlaylists([]);
     setLikedTracks([]);
@@ -303,20 +367,20 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
       audioRef.current.src = "";
     }
     toast({ title: "Disconnected", description: "SoundCloud account unlinked." });
-  }, [toast, deleteTokens]);
+  }, [toast, deleteTokensFromDb]);
 
   const loadPlaylists = useCallback(async () => {
     try {
-      const data = await callSoundCloudApi("get_playlists");
+      const data = await callSoundCloudApiLegacy("get_playlists");
       setPlaylists(Array.isArray(data) ? data : data?.collection || []);
     } catch (error) {
       console.error("Failed to load playlists:", error);
     }
-  }, [callSoundCloudApi]);
+  }, [callSoundCloudApiLegacy]);
 
   const loadLikedTracks = useCallback(async () => {
     try {
-      const data = await callSoundCloudApi("get_likes");
+      const data = await callSoundCloudApiLegacy("get_likes");
       const tracks = Array.isArray(data) 
         ? data.map((item: any) => item.track || item).filter(Boolean)
         : (data?.collection || []).map((item: any) => item.track || item).filter(Boolean);
@@ -324,24 +388,24 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Failed to load liked tracks:", error);
     }
-  }, [callSoundCloudApi]);
+  }, [callSoundCloudApiLegacy]);
 
   const searchTracks = useCallback(async (query: string): Promise<SoundCloudTrack[]> => {
     try {
-      const data = await callSoundCloudApi("search", { query });
+      const data = await callSoundCloudApiLegacy("search", { query });
       return Array.isArray(data) ? data : data?.collection || [];
     } catch (error) {
       console.error("Failed to search tracks:", error);
       return [];
     }
-  }, [callSoundCloudApi]);
+  }, [callSoundCloudApiLegacy]);
 
   const play = useCallback(async (track: SoundCloudTrack) => {
     try {
       setCurrentTrack(track);
       
-      // Get stream URL
-      const streamData = await callSoundCloudApi("get_stream_url", { trackId: track.id });
+      // Get stream URL via proxy
+      const streamData = await callSoundCloudApiLegacy("get_stream_url", { trackId: track.id });
       
       if (streamData?.stream_url && audioRef.current) {
         audioRef.current.src = streamData.stream_url;
@@ -354,7 +418,7 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to play track:", error);
       toast({ title: "Playback failed", description: "Could not play this track.", variant: "destructive" });
     }
-  }, [callSoundCloudApi, toast]);
+  }, [callSoundCloudApiLegacy, toast]);
 
   const pause = useCallback(() => {
     if (audioRef.current) {
