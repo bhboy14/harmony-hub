@@ -14,6 +14,84 @@ export type Database = {
   }
   public: {
     Tables: {
+      artists: {
+        Row: {
+          banner_url: string | null
+          biography: string | null
+          created_at: string
+          followers: number | null
+          genres: string[] | null
+          id: string
+          name: string
+          popularity: number | null
+          profile_image: string | null
+          spotify_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          banner_url?: string | null
+          biography?: string | null
+          created_at?: string
+          followers?: number | null
+          genres?: string[] | null
+          id?: string
+          name: string
+          popularity?: number | null
+          profile_image?: string | null
+          spotify_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          banner_url?: string | null
+          biography?: string | null
+          created_at?: string
+          followers?: number | null
+          genres?: string[] | null
+          id?: string
+          name?: string
+          popularity?: number | null
+          profile_image?: string | null
+          spotify_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      master_tracks: {
+        Row: {
+          canonical_artist: string | null
+          canonical_title: string
+          created_at: string
+          decade: string | null
+          genre: string | null
+          id: string
+          primary_album_art: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          canonical_artist?: string | null
+          canonical_title: string
+          created_at?: string
+          decade?: string | null
+          genre?: string | null
+          id?: string
+          primary_album_art?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          canonical_artist?: string | null
+          canonical_title?: string
+          created_at?: string
+          decade?: string | null
+          genre?: string | null
+          id?: string
+          primary_album_art?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       playlist_tracks: {
         Row: {
           added_at: string | null
@@ -149,6 +227,7 @@ export type Database = {
           external_id: string | null
           id: string
           local_url: string | null
+          master_track_id: string | null
           source: string | null
           title: string
           user_id: string | null
@@ -161,6 +240,7 @@ export type Database = {
           external_id?: string | null
           id?: string
           local_url?: string | null
+          master_track_id?: string | null
           source?: string | null
           title: string
           user_id?: string | null
@@ -173,11 +253,20 @@ export type Database = {
           external_id?: string | null
           id?: string
           local_url?: string | null
+          master_track_id?: string | null
           source?: string | null
           title?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tracks_master_track_id_fkey"
+            columns: ["master_track_id"]
+            isOneToOne: false
+            referencedRelation: "master_tracks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_api_tokens: {
         Row: {

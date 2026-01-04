@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.soundcloud-proxy]
 verify_jwt = true
+
+[functions.spotify-artist]
+verify_jwt = true

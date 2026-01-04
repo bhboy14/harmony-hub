@@ -1,10 +1,11 @@
 import { Folder, Youtube } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-interface SourceIconProps {
+export interface SourceIconProps {
   source: 'spotify' | 'youtube' | 'local' | 'soundcloud';
   size?: 'sm' | 'md' | 'lg';
   showTooltip?: boolean;
+  className?: string;
 }
 
 const SpotifyIcon = ({ className }: { className?: string }) => (
@@ -48,12 +49,12 @@ const sourceConfig = {
   },
 };
 
-export const SourceIcon = ({ source, size = 'md', showTooltip = true }: SourceIconProps) => {
+export const SourceIcon = ({ source, size = 'md', showTooltip = true, className }: SourceIconProps) => {
   const config = sourceConfig[source];
   const Icon = config.icon;
   
   const iconElement = (
-    <Icon className={`${sizeClasses[size]} ${config.color}`} />
+    <Icon className={`${sizeClasses[size]} ${config.color} ${className || ''}`} />
   );
 
   if (!showTooltip) {
