@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      playlist_tracks: {
+        Row: {
+          added_at: string | null
+          id: string
+          playlist_id: string | null
+          position: number | null
+          track_id: string | null
+        }
+        Insert: {
+          added_at?: string | null
+          id?: string
+          playlist_id?: string | null
+          position?: number | null
+          track_id?: string | null
+        }
+        Update: {
+          added_at?: string | null
+          id?: string
+          playlist_id?: string | null
+          position?: number | null
+          track_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "playlist_tracks_playlist_id_fkey"
+            columns: ["playlist_id"]
+            isOneToOne: false
+            referencedRelation: "playlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "playlist_tracks_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      playlists: {
+        Row: {
+          cover_art: string | null
+          created_at: string | null
+          description: string | null
+          external_id: string | null
+          id: string
+          name: string
+          source_platform: string | null
+          user_id: string | null
+        }
+        Insert: {
+          cover_art?: string | null
+          created_at?: string | null
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          name: string
+          source_platform?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          cover_art?: string | null
+          created_at?: string | null
+          description?: string | null
+          external_id?: string | null
+          id?: string
+          name?: string
+          source_platform?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -65,6 +137,45 @@ export type Database = {
           refresh_token?: string
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      tracks: {
+        Row: {
+          album_art: string | null
+          artist: string | null
+          created_at: string | null
+          duration_ms: number | null
+          external_id: string | null
+          id: string
+          local_url: string | null
+          source: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          album_art?: string | null
+          artist?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          external_id?: string | null
+          id?: string
+          local_url?: string | null
+          source?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          album_art?: string | null
+          artist?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          external_id?: string | null
+          id?: string
+          local_url?: string | null
+          source?: string | null
+          title?: string
+          user_id?: string | null
         }
         Relationships: []
       }

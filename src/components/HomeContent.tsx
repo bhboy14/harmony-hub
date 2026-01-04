@@ -8,6 +8,7 @@ import { Search } from "lucide-react";
 import { useColorExtractor } from "@/hooks/useColorExtractor";
 import { useRecentlyPlayed, RecentTrack } from "@/hooks/useRecentlyPlayed";
 import { RecentlyPlayed } from "@/components/RecentlyPlayed";
+import { SourceIcon } from "@/components/SourceIcon";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -264,7 +265,10 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                     <Play className="h-6 w-6 fill-current ml-0.5" />
                   </Button>
                 </div>
-                <h3 className="font-semibold text-foreground truncate text-sm">{item.track.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground truncate text-sm">{item.track.name}</h3>
+                  <SourceIcon source="spotify" size="sm" />
+                </div>
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
                   {item.track.artists?.map((a: any) => a.name).join(", ")}
                 </p>
