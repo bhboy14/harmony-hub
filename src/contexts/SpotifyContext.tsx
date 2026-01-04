@@ -397,6 +397,26 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(interval);
   }, [tokens, refreshPlaybackState]);
 
+  // Auto-load playlists and saved tracks when connected
+  useEffect(() => {
+    if (!tokens) return;
+
+    const loadUserData = async () => {
+      try {
+        const [playlistsData, tracksData] = await Promise.all([
+          callSpotifyApi("get_playlists"),
+          callSpotifyApi("get_saved_tracks"),
+        ]);
+        setPlaylists(playlistsData?.items || []);
+        setSavedTracks(tracksData?.items?.map((i: any) => i.track) || []);
+      } catch (error) {
+        console.error("Failed to load Spotify data:", error);
+      }
+    };
+
+    loadUserData();
+  }, [tokens, callSpotifyApi]);
+
   const play = useCallback(async (uri?: string, uris?: string[]) => {
     // Get current devices to find an active one or select first available
     const deviceList = await callSpotifyApi("get_devices");
