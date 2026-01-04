@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sidebar } from "@/components/Sidebar";
-import { Header } from "@/components/Header";
+import { IconSidebar } from "@/components/IconSidebar";
+import { HomeContent } from "@/components/HomeContent";
+import { NowPlayingPanel } from "@/components/NowPlayingPanel";
 import { MusicBrowser } from "@/components/MusicBrowser";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
@@ -11,17 +12,17 @@ import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
 import { PlaybackBar } from "@/components/PlaybackBar";
-import { RoleGate } from "@/components/RoleGate";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary, Track } from "@/hooks/useMediaLibrary";
-import { useAzanScheduler, PostAzanAction } from "@/hooks/useAzanScheduler";
+import { useAzanScheduler } from "@/hooks/useAzanScheduler";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Youtube, HardDrive } from "lucide-react";
+import { Loader2, Youtube, HardDrive, ChevronLeft, ChevronRight, User, ListMusic } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/UserMenu";
 
 // Spotify brand icon
 const SpotifyIcon = () => (
@@ -32,15 +33,16 @@ const SpotifyIcon = () => (
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [showNowPlaying, setShowNowPlaying] = useState(false);
   const navigate = useNavigate();
-  const { user, isLoading: authLoading, role } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { prayerTimes, nextPrayer, timeUntilNext } = usePrayerTimes();
   const mediaLibrary = useMediaLibrary();
   const spotify = useSpotify();
   const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
 
-  // Azan scheduler integration with Spotify - hooks must be called before any early returns
+  // Azan scheduler integration
   const handleFadeOut = useCallback(async (durationMs: number) => {
     if (spotify.isConnected && spotify.playbackState?.isPlaying) {
       await spotify.fadeVolume(0, durationMs);
@@ -86,6 +88,13 @@ const Index = () => {
     }
   }, [authLoading, user, navigate]);
 
+  // Show now playing when a track is active
+  useEffect(() => {
+    if (unifiedAudio.currentTrack && !showNowPlaying) {
+      setShowNowPlaying(true);
+    }
+  }, [unifiedAudio.currentTrack]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -99,197 +108,189 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+    <div className="min-h-screen bg-background flex">
+      {/* Icon Sidebar */}
+      <IconSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <div className="ml-64 flex flex-col min-h-screen">
-        {/* Prayer Times Header */}
-        <Header 
-          prayerTimes={prayerTimes} 
-          nextPrayer={nextPrayer} 
-          timeUntilNext={timeUntilNext} 
-        />
+      {/* Main Content Area */}
+      <div className="flex-1 ml-[72px] flex flex-col h-screen">
+        {/* Top Header Bar */}
+        <header className="h-16 flex items-center justify-between px-6 bg-transparent">
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 rounded-full bg-black/40"
+              onClick={() => window.history.back()}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 rounded-full bg-black/40"
+              onClick={() => window.history.forward()}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 rounded-full ${showNowPlaying ? 'text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setShowNowPlaying(!showNowPlaying)}
+            >
+              <ListMusic className="h-5 w-5" />
+            </Button>
+            <UserMenu />
+          </div>
+        </header>
 
-        <main className="flex-1 p-8">
-          {activeTab === "dashboard" && (
-            <div className="space-y-6 animate-fade-in">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-                <p className="text-muted-foreground mt-1">Your space, your sound, seamlessly integrated</p>
+        {/* Content + Now Playing */}
+        <div className="flex-1 flex overflow-hidden pb-20">
+          {/* Main Content */}
+          <main className="flex-1 overflow-hidden">
+            {activeTab === "dashboard" && (
+              <HomeContent onOpenSearch={() => setActiveTab("search")} />
+            )}
+
+            {activeTab === "search" && (
+              <div className="p-6 animate-fade-in">
+                <MusicBrowser onOpenFullLibrary={() => setActiveTab("library")} />
               </div>
+            )}
 
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Music Browser - Takes 2 columns */}
-                <div className="lg:col-span-2">
-                  <MusicBrowser onOpenFullLibrary={() => setActiveTab("library")} />
+            {activeTab === "library" && (
+              <div className="p-6 h-full animate-fade-in overflow-y-auto custom-scrollbar pb-32">
+                <Tabs defaultValue="spotify" className="space-y-6">
+                  <TabsList className="bg-secondary">
+                    <TabsTrigger value="spotify" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
+                      <div className="text-[#1DB954]"><SpotifyIcon /></div>
+                      Spotify
+                    </TabsTrigger>
+                    <TabsTrigger value="youtube" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
+                      <Youtube className="h-4 w-4 text-[#FF0000]" />
+                      YouTube
+                    </TabsTrigger>
+                    <TabsTrigger value="local" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
+                      <HardDrive className="h-4 w-4" />
+                      Local
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="spotify" className="h-[calc(100vh-14rem)]">
+                    <SpotifyPlayer />
+                  </TabsContent>
+                  <TabsContent value="youtube" className="h-[calc(100vh-14rem)]">
+                    <YouTubePlayer />
+                  </TabsContent>
+                  <TabsContent value="local" className="h-[calc(100vh-14rem)]">
+                    <MediaLibrary 
+                      {...mediaLibrary} 
+                      playTrack={(track: Track) => {
+                        unifiedAudio.playLocalTrack({
+                          id: track.id,
+                          title: track.title,
+                          artist: track.artist,
+                          duration: track.duration,
+                          fileHandle: track.fileHandle,
+                          url: track.url,
+                          albumArt: track.albumArt,
+                        });
+                      }}
+                      currentTrack={unifiedAudio.activeSource === 'local' && unifiedAudio.currentTrack ? {
+                        id: unifiedAudio.currentTrack.id,
+                        title: unifiedAudio.currentTrack.title,
+                        artist: unifiedAudio.currentTrack.artist,
+                        duration: mediaLibrary.currentTrack?.duration || '0:00',
+                        source: 'local',
+                        albumArt: unifiedAudio.currentTrack.albumArt,
+                      } : null}
+                      isPlaying={unifiedAudio.activeSource === 'local' && unifiedAudio.isPlaying}
+                      pauseTrack={() => unifiedAudio.pause()}
+                      resumeTrack={() => unifiedAudio.play()}
+                      volume={unifiedAudio.volume}
+                      setVolume={(v) => unifiedAudio.setVolume(v)}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
+
+            {activeTab === "azan" && (
+              <div className="p-6 max-w-2xl mx-auto animate-fade-in overflow-y-auto h-full custom-scrollbar pb-32">
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-foreground">Athan Schedule</h1>
+                  <p className="text-muted-foreground mt-1">Configure automated prayer calls</p>
                 </div>
-
-                {/* Quick Actions */}
-                <Card className="glass-panel">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={() => setActiveTab("azan")}
-                      className="p-4 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 transition-all text-left"
-                    >
-                      <span className="font-arabic text-2xl text-accent block">الأذان</span>
-                      <span className="text-sm text-muted-foreground">Play Azan</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("pa")}
-                      className="p-4 rounded-xl bg-accent/10 hover:bg-accent/20 border border-accent/20 transition-all text-left"
-                    >
-                      <span className="text-2xl">📢</span>
-                      <span className="text-sm text-muted-foreground block">Announcement</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("library")}
-                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                    >
-                      <span className="text-2xl">🎵</span>
-                      <span className="text-sm text-muted-foreground block">Full Library</span>
-                    </button>
-                    <button 
-                      onClick={() => setActiveTab("settings")}
-                      className="p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 transition-all text-left"
-                    >
-                      <span className="text-2xl">⚙️</span>
-                      <span className="text-sm text-muted-foreground block">Settings</span>
-                    </button>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-          )}
-
-        {activeTab === "library" && (
-          <div className="animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">Media Library</h1>
-              <p className="text-muted-foreground mt-1">Manage local files and streaming music</p>
-            </div>
-            <Tabs defaultValue="spotify" className="space-y-6">
-              <TabsList>
-                <TabsTrigger value="spotify" className="gap-2">
-                  <div className="text-[#1DB954]"><SpotifyIcon /></div>
-                  Spotify
-                </TabsTrigger>
-                <TabsTrigger value="youtube" className="gap-2">
-                  <Youtube className="h-4 w-4 text-[#FF0000]" />
-                  YouTube
-                </TabsTrigger>
-                <TabsTrigger value="local" className="gap-2">
-                  <HardDrive className="h-4 w-4" />
-                  Local Library
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="spotify" className="h-[calc(100vh-12rem)]">
-                <SpotifyPlayer />
-              </TabsContent>
-              <TabsContent value="youtube" className="h-[calc(100vh-12rem)]">
-                <YouTubePlayer />
-              </TabsContent>
-              <TabsContent value="local" className="h-[calc(100vh-12rem)]">
-                <MediaLibrary 
-                  {...mediaLibrary} 
-                  playTrack={(track: Track) => {
-                    unifiedAudio.playLocalTrack({
-                      id: track.id,
-                      title: track.title,
-                      artist: track.artist,
-                      duration: track.duration,
-                      fileHandle: track.fileHandle,
-                      url: track.url,
-                      albumArt: track.albumArt,
+                <AzanPlayer 
+                  isAzanPlaying={azanScheduler.isAzanPlaying}
+                  onTestAzan={azanScheduler.testAzanSequence}
+                  settings={{
+                    reciter: "mishary",
+                    fadeInDuration: azanScheduler.settings.fadeInDuration,
+                    fadeOutDuration: azanScheduler.settings.fadeOutDuration,
+                    postAzanAction: azanScheduler.settings.postAzanAction,
+                    postAzanDelay: azanScheduler.settings.postAzanDelay,
+                    enabled: azanScheduler.settings.enabled,
+                    minutesBefore: azanScheduler.settings.minutesBefore,
+                  }}
+                  onSettingsChange={(newSettings) => {
+                    azanScheduler.setSettings({
+                      ...azanScheduler.settings,
+                      fadeInDuration: newSettings.fadeInDuration,
+                      fadeOutDuration: newSettings.fadeOutDuration,
+                      postAzanAction: newSettings.postAzanAction,
+                      postAzanDelay: newSettings.postAzanDelay,
+                      enabled: newSettings.enabled,
+                      minutesBefore: newSettings.minutesBefore,
                     });
                   }}
-                  currentTrack={unifiedAudio.activeSource === 'local' && unifiedAudio.currentTrack ? {
-                    id: unifiedAudio.currentTrack.id,
-                    title: unifiedAudio.currentTrack.title,
-                    artist: unifiedAudio.currentTrack.artist,
-                    duration: mediaLibrary.currentTrack?.duration || '0:00',
-                    source: 'local',
-                    albumArt: unifiedAudio.currentTrack.albumArt,
-                  } : null}
-                  isPlaying={unifiedAudio.activeSource === 'local' && unifiedAudio.isPlaying}
-                  pauseTrack={() => unifiedAudio.pause()}
-                  resumeTrack={() => unifiedAudio.play()}
-                  volume={unifiedAudio.volume}
-                  setVolume={(v) => unifiedAudio.setVolume(v)}
                 />
-              </TabsContent>
-            </Tabs>
-          </div>
-        )}
+              </div>
+            )}
 
-        {activeTab === "azan" && (
-          <div className="max-w-2xl mx-auto animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">Athan Schedule</h1>
-              <p className="text-muted-foreground mt-1">Configure automated prayer calls with smart audio management</p>
-            </div>
-            <AzanPlayer 
-              isAzanPlaying={azanScheduler.isAzanPlaying}
-              onTestAzan={azanScheduler.testAzanSequence}
-              settings={{
-                reciter: "mishary",
-                fadeInDuration: azanScheduler.settings.fadeInDuration,
-                fadeOutDuration: azanScheduler.settings.fadeOutDuration,
-                postAzanAction: azanScheduler.settings.postAzanAction,
-                postAzanDelay: azanScheduler.settings.postAzanDelay,
-                enabled: azanScheduler.settings.enabled,
-                minutesBefore: azanScheduler.settings.minutesBefore,
-              }}
-              onSettingsChange={(newSettings) => {
-                azanScheduler.setSettings({
-                  ...azanScheduler.settings,
-                  fadeInDuration: newSettings.fadeInDuration,
-                  fadeOutDuration: newSettings.fadeOutDuration,
-                  postAzanAction: newSettings.postAzanAction,
-                  postAzanDelay: newSettings.postAzanDelay,
-                  enabled: newSettings.enabled,
-                  minutesBefore: newSettings.minutesBefore,
-                });
-              }}
-            />
-          </div>
-        )}
+            {activeTab === "pa" && (
+              <div className="p-6 max-w-4xl mx-auto animate-fade-in overflow-y-auto h-full custom-scrollbar pb-32">
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-foreground">Broadcast Mode</h1>
+                  <p className="text-muted-foreground mt-1">Live announcements</p>
+                </div>
+                <PASystem />
+              </div>
+            )}
 
-        {activeTab === "pa" && (
-          <div className="max-w-4xl mx-auto animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">Broadcast Mode</h1>
-              <p className="text-muted-foreground mt-1">Live announcements with professional audio effects</p>
-            </div>
-            <PASystem />
-          </div>
-        )}
+            {activeTab === "admin" && (
+              <div className="p-6 animate-fade-in overflow-y-auto h-full custom-scrollbar pb-32">
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-foreground">User Management</h1>
+                  <p className="text-muted-foreground mt-1">Manage roles and permissions</p>
+                </div>
+                <AdminPanel />
+              </div>
+            )}
 
-        {activeTab === "admin" && (
-          <div className="animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">User Management</h1>
-              <p className="text-muted-foreground mt-1">Manage user roles and permissions</p>
-            </div>
-            <AdminPanel />
-          </div>
-        )}
+            {activeTab === "settings" && (
+              <div className="p-6 animate-fade-in overflow-y-auto h-full custom-scrollbar pb-32">
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+                  <p className="text-muted-foreground mt-1">Configure preferences</p>
+                </div>
+                <SettingsPanel />
+              </div>
+            )}
+          </main>
 
-        {activeTab === "settings" && (
-          <div className="animate-fade-in">
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-foreground">Settings</h1>
-              <p className="text-muted-foreground mt-1">Configure system preferences</p>
-            </div>
-            <SettingsPanel />
-          </div>
-        )}
-        </main>
+          {/* Now Playing Panel */}
+          <NowPlayingPanel 
+            isOpen={showNowPlaying} 
+            onClose={() => setShowNowPlaying(false)} 
+          />
+        </div>
       </div>
       
+      {/* Playback Bar */}
       <PlaybackBar />
     </div>
   );

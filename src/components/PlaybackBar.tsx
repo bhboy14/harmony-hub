@@ -8,8 +8,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -23,6 +21,7 @@ import {
   SkipForward, 
   Volume2, 
   VolumeX,
+  Volume1,
   Repeat,
   Shuffle,
   MonitorSpeaker,
@@ -31,13 +30,15 @@ import {
   Speaker,
   Tv,
   Check,
-  Globe,
   RefreshCw,
   Mic,
   MicOff,
   Music,
   HardDrive,
-  Youtube
+  Youtube,
+  Maximize2,
+  ListMusic,
+  Airplay
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
@@ -50,42 +51,20 @@ const SpotifyIcon = () => (
 
 const getDeviceIcon = (type: string) => {
   switch (type?.toLowerCase()) {
-    case 'computer':
-      return Laptop;
-    case 'smartphone':
-      return Smartphone;
-    case 'speaker':
-      return Speaker;
-    case 'tv':
-      return Tv;
-    default:
-      return MonitorSpeaker;
+    case 'computer': return Laptop;
+    case 'smartphone': return Smartphone;
+    case 'speaker': return Speaker;
+    case 'tv': return Tv;
+    default: return MonitorSpeaker;
   }
 };
 
 const getSourceIcon = (source: string | null) => {
   switch (source) {
-    case 'spotify':
-      return <SpotifyIcon />;
-    case 'local':
-      return <HardDrive className="h-4 w-4" />;
-    case 'youtube':
-      return <Youtube className="h-4 w-4 text-[#FF0000]" />;
-    default:
-      return <Music className="h-4 w-4" />;
-  }
-};
-
-const getSourceColor = (source: string | null) => {
-  switch (source) {
-    case 'spotify':
-      return '#1DB954';
-    case 'youtube':
-      return '#FF0000';
-    case 'local':
-      return 'hsl(var(--primary))';
-    default:
-      return 'hsl(var(--muted-foreground))';
+    case 'spotify': return <SpotifyIcon />;
+    case 'local': return <HardDrive className="h-4 w-4" />;
+    case 'youtube': return <Youtube className="h-4 w-4 text-[#FF0000]" />;
+    default: return <Music className="h-4 w-4" />;
   }
 };
 
@@ -113,12 +92,10 @@ export const PlaybackBar = () => {
     previous
   } = unified;
 
-  // For device selection, we still use Spotify context
   const { 
     isConnected: spotifyConnected, 
     devices,
     webPlayerReady,
-    webPlayerDeviceId,
     playbackState,
     transferPlayback,
     refreshPlaybackState,
@@ -166,19 +143,19 @@ export const PlaybackBar = () => {
     await unified.seek(value[0]);
   };
 
-  // Show connect prompt if nothing is connected/playing
   const hasAnySource = activeSource || spotifyConnected;
   
+  // Empty state
   if (!hasAnySource) {
     return (
-      <div className="fixed bottom-0 left-64 right-0 h-20 bg-card/95 backdrop-blur-xl border-t border-border z-50">
+      <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50">
         <div className="h-full flex items-center justify-center gap-4 px-6">
           <Music className="h-5 w-5 text-muted-foreground" />
-          <p className="text-muted-foreground text-sm">Connect a source to control playback</p>
+          <p className="text-muted-foreground text-sm">Connect a source to play music</p>
           <Button 
             onClick={connect}
             size="sm" 
-            className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-semibold gap-2"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 rounded-full px-6"
           >
             <SpotifyIcon /> Connect Spotify
           </Button>
@@ -187,11 +164,11 @@ export const PlaybackBar = () => {
     );
   }
 
-  const sourceColor = getSourceColor(activeSource);
+  const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2;
 
   return (
-    <div className="fixed bottom-0 left-64 right-0 h-20 bg-card/95 backdrop-blur-xl border-t border-border z-50">
-      <div className="h-full grid grid-cols-3 items-center px-4 gap-4">
+    <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50">
+      <div className="h-full grid grid-cols-3 items-center px-4">
         {/* Left: Track Info */}
         <div className="flex items-center gap-3 min-w-0">
           {currentTrack ? (
@@ -203,29 +180,23 @@ export const PlaybackBar = () => {
                   className="w-14 h-14 rounded shadow-lg object-cover"
                 />
               ) : (
-                <div 
-                  className="w-14 h-14 rounded shadow-lg flex items-center justify-center"
-                  style={{ backgroundColor: `${sourceColor}20` }}
-                >
+                <div className="w-14 h-14 rounded shadow-lg bg-secondary flex items-center justify-center">
                   {getSourceIcon(activeSource)}
                 </div>
               )}
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-foreground truncate text-sm">
-                    {currentTrack.title}
-                  </p>
-                  <span 
-                    className="flex-shrink-0 opacity-70"
-                    style={{ color: sourceColor }}
-                  >
-                    {getSourceIcon(activeSource)}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="font-medium text-foreground truncate text-sm hover:underline cursor-pointer">
+                  {currentTrack.title}
+                </p>
+                <p className="text-xs text-muted-foreground truncate hover:underline cursor-pointer">
                   {currentTrack.artist}
                 </p>
               </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
+                <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor">
+                  <path d="M1.69 2A4.582 4.582 0 018 2.023 4.583 4.583 0 0114.31 2a4.583 4.583 0 010 6.496L8 14.153 1.69 8.496a4.583 4.583 0 010-6.496z"/>
+                </svg>
+              </Button>
             </>
           ) : (
             <div className="flex items-center gap-3">
@@ -234,7 +205,6 @@ export const PlaybackBar = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">No track playing</p>
-                <p className="text-xs text-muted-foreground">Select a song to play</p>
               </div>
             </div>
           )}
@@ -242,7 +212,7 @@ export const PlaybackBar = () => {
 
         {/* Center: Playback Controls */}
         <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button 
               variant="ghost" 
               size="icon" 
@@ -262,14 +232,14 @@ export const PlaybackBar = () => {
             </Button>
             <Button 
               size="icon" 
-              className="h-9 w-9 rounded-full bg-foreground text-background hover:scale-105 transition-transform"
+              className="h-8 w-8 rounded-full bg-foreground text-background hover:scale-105 hover:bg-foreground transition-transform"
               onClick={handlePlayPause}
               disabled={!canControl || !activeSource}
             >
               {isPlaying ? (
-                <Pause className="h-5 w-5 fill-current" />
+                <Pause className="h-4 w-4 fill-current" />
               ) : (
-                <Play className="h-5 w-5 fill-current ml-0.5" />
+                <Play className="h-4 w-4 fill-current ml-0.5" />
               )}
             </Button>
             <Button 
@@ -292,202 +262,124 @@ export const PlaybackBar = () => {
           </div>
           
           {/* Progress Bar */}
-          <div className="flex items-center gap-2 w-full max-w-md">
-            <span className="text-xs text-muted-foreground w-10 text-right">
+          <div className="flex items-center gap-2 w-full max-w-[600px]">
+            <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">
               {formatTime(progress)}
             </span>
-            <Slider
-              value={[progress]}
-              max={duration || 1}
-              step={1000}
-              onValueChange={handleSeek}
-              disabled={!canControl || activeSource === 'spotify'}
-              className="flex-1"
-            />
-            <span className="text-xs text-muted-foreground w-10">
+            <div className="flex-1 group">
+              <Slider
+                value={[progress]}
+                max={duration || 1}
+                step={1000}
+                onValueChange={handleSeek}
+                disabled={!canControl || activeSource === 'spotify'}
+                className="cursor-pointer"
+              />
+            </div>
+            <span className="text-xs text-muted-foreground w-10 tabular-nums">
               {formatTime(duration)}
             </span>
           </div>
         </div>
 
-        {/* Right: PA, Volume & Device */}
-        <div className="flex items-center justify-end gap-3">
-          {/* PA Mic Button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className={`h-8 w-8 ${isLive ? 'text-destructive bg-destructive/10 hover:bg-destructive/20' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={toggleBroadcast}
-                disabled={!canControl}
-              >
-                {isLive ? (
-                  <MicOff className="h-4 w-4" />
-                ) : (
-                  <Mic className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>{isLive ? 'Stop Broadcast' : 'Start PA Broadcast'}</p>
-            </TooltipContent>
-          </Tooltip>
-          
-          {/* Audio Level Meter */}
+        {/* Right: Controls */}
+        <div className="flex items-center justify-end gap-1">
+          {/* PA Mic */}
+          {canControl && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className={`h-8 w-8 ${isLive ? 'text-destructive' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={toggleBroadcast}
+                >
+                  {isLive ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isLive ? 'Stop Broadcast' : 'Start Broadcast'}</TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Audio Level */}
           {isLive && (
-            <div className="flex items-center gap-0.5 h-6">
-              {[...Array(5)].map((_, i) => {
-                const threshold = (i + 1) * 20;
-                const isActive = audioLevel >= threshold - 10;
-                const barColor = i < 3 ? 'bg-green-500' : i < 4 ? 'bg-yellow-500' : 'bg-red-500';
-                return (
-                  <div
-                    key={i}
-                    className={`w-1 rounded-full transition-all duration-75 ${
-                      isActive ? barColor : 'bg-muted-foreground/30'
-                    }`}
-                    style={{
-                      height: `${12 + i * 3}px`,
-                    }}
-                  />
-                );
-              })}
+            <div className="flex items-center gap-0.5 h-6 mx-1">
+              {[...Array(5)].map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-1 rounded-full transition-all ${
+                    audioLevel >= (i + 1) * 20 - 10 
+                      ? i < 3 ? 'bg-green-500' : i < 4 ? 'bg-yellow-500' : 'bg-red-500'
+                      : 'bg-muted-foreground/30'
+                  }`}
+                  style={{ height: `${12 + i * 3}px` }}
+                />
+              ))}
             </div>
           )}
 
-          {/* Source Indicator */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div 
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium"
-                style={{ 
-                  backgroundColor: `${sourceColor}15`,
-                  color: sourceColor 
-                }}
-              >
-                {getSourceIcon(activeSource)}
-                <span className="hidden sm:inline capitalize">
-                  {activeSource || 'None'}
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              <p>Active source: {activeSource || 'None'}</p>
-            </TooltipContent>
-          </Tooltip>
+          {/* Now Playing Queue */}
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <ListMusic className="h-4 w-4" />
+          </Button>
 
-          {/* Device Selector Dropdown (for Spotify) */}
+          {/* Device Selector */}
           {spotifyConnected && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className={`h-8 w-8 ${playbackState?.device ? 'text-[#1DB954]' : 'text-muted-foreground'} hover:text-foreground`}
+                  className={`h-8 w-8 ${playbackState?.device ? 'text-primary' : 'text-muted-foreground'} hover:text-foreground`}
                   disabled={!canControl}
                 >
-                  {playbackState?.device ? (
-                    (() => {
-                      const DeviceIcon = getDeviceIcon(playbackState.device.type);
-                      return <DeviceIcon className="h-4 w-4" />;
-                    })()
-                  ) : (
-                    <MonitorSpeaker className="h-4 w-4" />
-                  )}
+                  <Airplay className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
-                align="end" 
-                className="w-72 bg-popover border border-border shadow-lg z-[60]"
-                sideOffset={8}
-              >
+              <DropdownMenuContent align="end" className="w-64 bg-popover" sideOffset={16}>
                 <div className="px-3 py-2 border-b border-border flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Connect to a device</p>
-                    <p className="text-xs text-muted-foreground">Select a device to play on</p>
-                  </div>
+                  <span className="text-sm font-medium">Connect to a device</span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      refreshPlaybackState();
-                    }}
+                    className="h-6 w-6"
+                    onClick={(e) => { e.stopPropagation(); refreshPlaybackState(); }}
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3 w-3" />
                   </Button>
                 </div>
                 
-                {/* Web Player Option */}
-                {webPlayerReady && webPlayerDeviceId && (
-                  <div className="border-b border-border">
+                {webPlayerReady && (
+                  <DropdownMenuItem 
+                    onClick={activateWebPlayer}
+                    className={`flex items-center gap-3 px-3 py-2 ${playbackState?.device?.name === 'Lovable Web Player' ? 'bg-primary/10' : ''}`}
+                  >
+                    <MonitorSpeaker className={`h-4 w-4 ${playbackState?.device?.name === 'Lovable Web Player' ? 'text-primary' : ''}`} />
+                    <span className={playbackState?.device?.name === 'Lovable Web Player' ? 'text-primary font-medium' : ''}>This Browser</span>
+                    {playbackState?.device?.name === 'Lovable Web Player' && <Check className="h-4 w-4 text-primary ml-auto" />}
+                  </DropdownMenuItem>
+                )}
+                
+                {devices.filter(d => d.name !== 'Lovable Web Player').map((device) => {
+                  const DeviceIcon = getDeviceIcon(device.type);
+                  return (
                     <DropdownMenuItem 
-                      onClick={() => activateWebPlayer()}
-                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer ${
-                        playbackState?.device?.name === 'Lovable Web Player' ? 'bg-[#1DB954]/10' : ''
-                      }`}
+                      key={device.id}
+                      onClick={() => !device.is_active && transferPlayback(device.id)}
+                      className={`flex items-center gap-3 px-3 py-2 ${device.is_active ? 'bg-primary/10' : ''}`}
                     >
-                      <Globe className={`h-5 w-5 ${
-                        playbackState?.device?.name === 'Lovable Web Player' ? 'text-[#1DB954]' : 'text-muted-foreground'
-                      }`} />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm truncate ${
-                          playbackState?.device?.name === 'Lovable Web Player' ? 'text-[#1DB954] font-medium' : 'text-foreground'
-                        }`}>
-                          This Browser
-                        </p>
-                        <p className="text-xs text-muted-foreground">Cast via AirPlay / Chromecast</p>
-                      </div>
-                      {playbackState?.device?.name === 'Lovable Web Player' && (
-                        <Check className="h-4 w-4 text-[#1DB954]" />
-                      )}
+                      <DeviceIcon className={`h-4 w-4 ${device.is_active ? 'text-primary' : ''}`} />
+                      <span className={device.is_active ? 'text-primary font-medium' : ''}>{device.name}</span>
+                      {device.is_active && <Check className="h-4 w-4 text-primary ml-auto" />}
                     </DropdownMenuItem>
-                  </div>
-                )}
-                
-                {!webPlayerReady && (
-                  <div className="px-3 py-2 border-b border-border bg-muted/30">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Web player initializing...</span>
-                    </div>
-                  </div>
-                )}
-                
-                {devices.length === 0 ? (
-                  <div className="px-3 py-4 text-center">
-                    <p className="text-sm text-muted-foreground">No other devices found</p>
-                    <p className="text-xs text-muted-foreground mt-1">Open Spotify on a device</p>
-                  </div>
-                ) : (
-                  devices.filter(d => d.name !== 'Lovable Web Player').map((device) => {
-                    const DeviceIcon = getDeviceIcon(device.type);
-                    const isActive = device.is_active;
-                    return (
-                      <DropdownMenuItem 
-                        key={device.id}
-                        onClick={() => !isActive && transferPlayback(device.id)}
-                        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer ${isActive ? 'bg-[#1DB954]/10' : ''}`}
-                      >
-                        <DeviceIcon className={`h-5 w-5 ${isActive ? 'text-[#1DB954]' : 'text-muted-foreground'}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm truncate ${isActive ? 'text-[#1DB954] font-medium' : 'text-foreground'}`}>
-                            {device.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground capitalize">{device.type}</p>
-                        </div>
-                        {isActive && <Check className="h-4 w-4 text-[#1DB954]" />}
-                      </DropdownMenuItem>
-                    );
-                  })
-                )}
+                  );
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          
-          <div className="flex items-center gap-2 w-32">
+
+          {/* Volume */}
+          <div className="flex items-center gap-1 w-32">
             <Button 
               variant="ghost" 
               size="icon" 
@@ -495,11 +387,7 @@ export const PlaybackBar = () => {
               onClick={toggleMute}
               disabled={!canControl}
             >
-              {isMuted || volume === 0 ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
+              <VolumeIcon className="h-4 w-4" />
             </Button>
             <Slider
               value={[isMuted ? 0 : volume]}
@@ -507,9 +395,14 @@ export const PlaybackBar = () => {
               step={1}
               onValueChange={handleVolumeChange}
               disabled={!canControl}
-              className="flex-1"
+              className="w-24"
             />
           </div>
+
+          {/* Fullscreen */}
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <Maximize2 className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>
