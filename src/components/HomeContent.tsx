@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Play, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
+import { useColorExtractor } from "@/hooks/useColorExtractor";
+import { useRecentlyPlayed, RecentTrack } from "@/hooks/useRecentlyPlayed";
+import { RecentlyPlayed } from "@/components/RecentlyPlayed";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -27,6 +30,11 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   const spotify = useSpotify();
   const [filter, setFilter] = useState<'all' | 'music' | 'podcasts'>('all');
   const [recentItems, setRecentItems] = useState<QuickPlayItem[]>([]);
+  const { recentTracks, addTrack, clearHistory } = useRecentlyPlayed();
+  
+  // Get current album art for color extraction
+  const currentAlbumArt = spotify.playbackState?.track?.album?.images?.[0]?.url;
+  const { colors } = useColorExtractor(currentAlbumArt);
 
   // Get playlists from Spotify
   const playlists = spotify.playlists || [];
@@ -43,6 +51,21 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       setRecentItems(items);
     }
   }, [playlists]);
+
+  // Track recently played when Spotify track changes
+  useEffect(() => {
+    if (spotify.playbackState?.track && spotify.playbackState.isPlaying) {
+      const track = spotify.playbackState.track;
+      addTrack({
+        id: track.id,
+        name: track.name,
+        artist: track.artists.map((a: any) => a.name).join(", "),
+        albumArt: track.album.images?.[0]?.url,
+        uri: track.uri,
+        source: 'spotify',
+      });
+    }
+  }, [spotify.playbackState?.track?.id, spotify.playbackState?.isPlaying, addTrack]);
 
   const playItem = async (item: QuickPlayItem) => {
     if (!spotify.tokens?.accessToken || !item.uri) return;
@@ -72,14 +95,36 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar">
-      {/* Hero gradient background */}
+      {/* Animated gradient background based on album art */}
       <div className="relative">
         <div 
-          className="absolute inset-0 h-80"
+          className="absolute inset-0 h-96 transition-all duration-1000 ease-out"
           style={{
-            background: 'linear-gradient(180deg, hsl(160 40% 20%) 0%, hsl(0 0% 7%) 100%)'
+            background: currentAlbumArt 
+              ? `linear-gradient(180deg, hsl(${colors.vibrant}) 0%, hsl(${colors.primary}) 40%, hsl(0 0% 7%) 100%)`
+              : 'linear-gradient(180deg, hsl(160 40% 20%) 0%, hsl(0 0% 7%) 100%)'
           }}
-        />
+        >
+          {/* Animated overlay for subtle movement */}
+          <div 
+            className="absolute inset-0 opacity-30 animate-pulse"
+            style={{
+              background: currentAlbumArt 
+                ? `radial-gradient(ellipse at 30% 20%, hsl(${colors.vibrant} / 0.4) 0%, transparent 50%)`
+                : 'none',
+              animationDuration: '4s',
+            }}
+          />
+          <div 
+            className="absolute inset-0 opacity-20"
+            style={{
+              background: currentAlbumArt 
+                ? `radial-gradient(ellipse at 70% 60%, hsl(${colors.primary} / 0.3) 0%, transparent 50%)`
+                : 'none',
+              animation: 'pulse 6s ease-in-out infinite',
+            }}
+          />
+        </div>
         
         {/* Content */}
         <div className="relative p-6 space-y-6">
@@ -166,6 +211,9 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
           )}
         </div>
       </div>
+
+      {/* Recently Played Section */}
+      <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
 
       {/* Made For You Section */}
       {madeForYou.length > 0 && (

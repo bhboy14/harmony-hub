@@ -19,7 +19,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Youtube, HardDrive, ChevronLeft, ChevronRight, User, ListMusic } from "lucide-react";
+import { Loader2, Youtube, HardDrive, ChevronLeft, ChevronRight, User, ListMusic, Moon, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
@@ -116,23 +116,39 @@ const Index = () => {
       <div className="flex-1 ml-[72px] flex flex-col h-screen">
         {/* Top Header Bar */}
         <header className="h-16 flex items-center justify-between px-6 bg-transparent">
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 rounded-full bg-black/40"
-              onClick={() => window.history.back()}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 rounded-full bg-black/40"
-              onClick={() => window.history.forward()}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full bg-black/40"
+                onClick={() => window.history.back()}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 rounded-full bg-black/40"
+                onClick={() => window.history.forward()}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            {/* Next Prayer Time */}
+            {nextPrayer && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                <Moon className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-primary">{nextPrayer.name}</span>
+                <span className="font-arabic text-sm text-accent">{nextPrayer.arabicName}</span>
+                <span className="text-sm font-bold text-foreground">{nextPrayer.time}</span>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground border-l border-border/50 pl-2 ml-1">
+                  <Clock className="h-3 w-3" />
+                  <span>{timeUntilNext}</span>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-3">
