@@ -3,7 +3,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useSoundCloud } from "@/contexts/SoundCloudContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUnifiedQueue, QueueTrack } from "@/hooks/useUnifiedQueue";
-
+import { useGaplessPlayback } from "@/hooks/useGaplessPlayback";
 export type AudioSource = "spotify" | "local" | "youtube" | "soundcloud" | "pa" | null;
 
 export interface UnifiedTrack {
@@ -126,7 +126,26 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const youtubePlayerRef = useRef<any>(null);
   const progressIntervalRef = useRef<number | null>(null);
   const crossfadeTimeoutRef = useRef<number | null>(null);
+  const prefetchedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [gaplessReady, setGaplessReady] = useState(false);
 
+  // Get next track for gapless prefetch
+  const nextQueueTrack = queueManager.upcomingTracks[0] || null;
+
+  // Gapless playback hook
+  const { swapToPrefetched, isPrefetched } = useGaplessPlayback({
+    currentTrack: queueManager.currentTrack,
+    nextTrack: nextQueueTrack,
+    progress,
+    duration,
+    isPlaying,
+    activeSource,
+    onNextReady: (audio) => {
+      prefetchedAudioRef.current = audio;
+      setGaplessReady(true);
+      console.log('[Gapless] Next track ready for seamless transition');
+    },
+  });
   // Initialize local audio element with robust error handling
   useEffect(() => {
     localAudioRef.current = new Audio();
@@ -237,13 +256,109 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [toast]);
 
-  // Auto-advance to next track
+  // Auto-advance to next track with gapless support
   const handleAutoNext = useCallback(async () => {
     const nextTrack = queueManager.goToNext();
     if (nextTrack) {
+      // Check if we have a prefetched audio ready for gapless playback
+      if (
+        prefetchedAudioRef.current && 
+        isPrefetched(nextTrack.queueId) &&
+        (nextTrack.source === 'local' || nextTrack.source === 'soundcloud')
+      ) {
+        console.log('[Gapless] Using prefetched audio for seamless transition');
+        
+        // Swap the prefetched audio into place
+        const prefetchedAudio = swapToPrefetched(isMuted ? 0 : volume / 100);
+        
+        if (prefetchedAudio) {
+          // Stop current audio
+          if (localAudioRef.current) {
+            localAudioRef.current.pause();
+            localAudioRef.current.src = '';
+          }
+          if (soundcloudAudioRef.current) {
+            soundcloudAudioRef.current.pause();
+            soundcloudAudioRef.current.src = '';
+          }
+          
+          // Use the prefetched audio element
+          if (nextTrack.source === 'local') {
+            localAudioRef.current = prefetchedAudio;
+            setLocalTrack({
+              id: nextTrack.id,
+              title: nextTrack.title,
+              artist: nextTrack.artist,
+              duration: formatMsToString(nextTrack.duration),
+              url: nextTrack.url,
+              albumArt: nextTrack.albumArt,
+            });
+            setActiveSourceState('local');
+          } else {
+            soundcloudAudioRef.current = prefetchedAudio;
+            setSoundcloudTrack({
+              id: nextTrack.id,
+              title: nextTrack.title,
+              artist: nextTrack.artist,
+              albumArt: nextTrack.albumArt,
+              duration: nextTrack.duration,
+            });
+            setActiveSourceState('soundcloud');
+          }
+          
+          // Start playback immediately
+          await prefetchedAudio.play();
+          setIsPlaying(true);
+          setDuration(nextTrack.duration);
+          setProgress(0);
+          setGaplessReady(false);
+          prefetchedAudioRef.current = null;
+          
+          // Re-attach event listeners to the new audio element
+          attachAudioListeners(prefetchedAudio, nextTrack.source === 'local' ? 'local' : 'soundcloud');
+          
+          return;
+        }
+      }
+      
+      // Fallback to normal playback
       await playQueueTrackInternal(nextTrack);
     }
-  }, [queueManager]);
+  }, [queueManager, isPrefetched, swapToPrefetched, isMuted, volume]);
+
+  // Helper to format ms to string
+  const formatMsToString = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Helper to attach audio event listeners
+  const attachAudioListeners = useCallback((audio: HTMLAudioElement, source: 'local' | 'soundcloud') => {
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      handleAutoNext();
+    };
+    
+    const handleTimeUpdate = () => {
+      if (activeSource === source) {
+        setProgress(audio.currentTime * 1000);
+        setDuration((audio.duration || 0) * 1000);
+      }
+    };
+    
+    const handleError = () => {
+      console.error(`${source} audio error`);
+      setIsPlaying(false);
+      setTimeout(() => handleAutoNext(), 500);
+    };
+    
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('error', handleError);
+  }, [activeSource]);
 
   // Update volume on all audio sources when volume changes
   useEffect(() => {
@@ -621,12 +736,6 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [playTrack]);
 
-  const formatMsToString = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const play = useCallback(async () => {
     switch (activeSource) {
