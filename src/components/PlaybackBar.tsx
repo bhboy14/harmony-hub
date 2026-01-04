@@ -23,6 +23,7 @@ import {
   VolumeX,
   Volume1,
   Repeat,
+  Repeat1,
   Shuffle,
   MonitorSpeaker,
   Laptop,
@@ -42,6 +43,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
+import { QueuePanel } from "@/components/QueuePanel";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -76,6 +78,7 @@ export const PlaybackBar = () => {
   
   const [isMuted, setIsMuted] = useState(false);
   const [previousVolume, setPreviousVolume] = useState(100);
+  const [queueOpen, setQueueOpen] = useState(false);
   
   const canControl = hasPermission('dj');
   
@@ -89,7 +92,19 @@ export const PlaybackBar = () => {
     play,
     pause,
     next,
-    previous
+    previous,
+    queue,
+    queueHistory,
+    currentQueueIndex,
+    upcomingTracks,
+    shuffle,
+    repeat,
+    removeFromQueue,
+    clearQueue,
+    clearUpcoming,
+    playQueueTrack,
+    toggleShuffle,
+    toggleRepeat,
   } = unified;
 
   const { 
@@ -216,8 +231,9 @@ export const PlaybackBar = () => {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              className={`h-8 w-8 ${shuffle ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               disabled={!canControl}
+              onClick={toggleShuffle}
             >
               <Shuffle className="h-4 w-4" />
             </Button>
@@ -254,10 +270,11 @@ export const PlaybackBar = () => {
             <Button 
               variant="ghost" 
               size="icon" 
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              className={`h-8 w-8 ${repeat !== 'off' ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
               disabled={!canControl}
+              onClick={toggleRepeat}
             >
-              <Repeat className="h-4 w-4" />
+              {repeat === 'one' ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
             </Button>
           </div>
           
@@ -319,9 +336,24 @@ export const PlaybackBar = () => {
           )}
 
           {/* Now Playing Queue */}
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-            <ListMusic className="h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className={`h-8 w-8 ${queueOpen || queue.length > 0 ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setQueueOpen(true)}
+              >
+                <ListMusic className="h-4 w-4" />
+                {queue.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                    {queue.length > 99 ? '99+' : queue.length}
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Queue ({queue.length})</TooltipContent>
+          </Tooltip>
 
           {/* Device Selector */}
           {spotifyConnected && (
@@ -405,6 +437,21 @@ export const PlaybackBar = () => {
           </Button>
         </div>
       </div>
+
+      {/* Queue Panel */}
+      <QueuePanel
+        isOpen={queueOpen}
+        onOpenChange={setQueueOpen}
+        queue={queue}
+        currentIndex={currentQueueIndex}
+        upcomingTracks={upcomingTracks}
+        history={queueHistory}
+        onPlayTrack={playQueueTrack}
+        onRemoveTrack={removeFromQueue}
+        onClearQueue={clearQueue}
+        onClearUpcoming={clearUpcoming}
+        isPlaying={isPlaying}
+      />
     </div>
   );
 };
