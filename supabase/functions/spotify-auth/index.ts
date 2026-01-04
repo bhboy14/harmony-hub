@@ -109,11 +109,13 @@ serve(async (req) => {
     if (action === "get_auth_url") {
       // Generate Spotify authorization URL
       const scopes = [
+        "streaming",
+        "user-read-email",
+        "user-read-private",
         "user-read-playback-state",
         "user-modify-playback-state",
         "user-read-currently-playing",
         "user-read-recently-played",
-        "streaming",
         "user-library-read",
         "user-library-modify",
         "playlist-read-private",
