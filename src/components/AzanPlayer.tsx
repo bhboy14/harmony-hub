@@ -1,64 +1,60 @@
-import { useState } from "react";
+import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Volume2, Settings2, Clock, Play, Pause } from "lucide-react";
-import { PostAzanAction } from "@/hooks/useAzanScheduler";
-
-interface AzanSettings {
-  reciter: string;
-  fadeInDuration: number;
-  fadeOutDuration: number;
-  postAzanAction: PostAzanAction;
-  postAzanDelay: number;
-  enabled: boolean;
-  minutesBefore: number;
-}
+import { Bell, Volume2, Settings2, Clock, Play, Pause, Upload, RotateCcw, Music, VolumeX } from "lucide-react";
+import { AzanPlayerSettings, MusicStopMode, PostAzanAction } from "@/hooks/useAzanPlayer";
 
 interface AzanPlayerProps {
   isAzanPlaying?: boolean;
-  onTestAzan?: () => void;
-  settings?: AzanSettings;
-  onSettingsChange?: (settings: AzanSettings) => void;
+  currentPrayer?: string | null;
+  onTestAzan?: (prayerName?: string) => void;
+  settings?: AzanPlayerSettings;
+  onSettingsChange?: (settings: Partial<AzanPlayerSettings>) => void;
+  onCustomAzanFile?: (file: File) => void;
+  onResetToDefault?: () => void;
+  nextScheduledPrayer?: string | null;
 }
 
 export const AzanPlayer = ({ 
   isAzanPlaying = false, 
+  currentPrayer,
   onTestAzan,
-  settings: externalSettings,
-  onSettingsChange 
+  settings,
+  onSettingsChange,
+  onCustomAzanFile,
+  onResetToDefault,
+  nextScheduledPrayer,
 }: AzanPlayerProps) => {
-  const [internalSettings, setInternalSettings] = useState<AzanSettings>({
-    reciter: "mishary",
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const defaultSettings: AzanPlayerSettings = {
+    enabled: true,
+    azanFile: "/audio/azan-default.mp3",
+    volume: 80,
     fadeInDuration: 3,
     fadeOutDuration: 5,
+    musicStopMode: "fade",
     postAzanAction: "resume",
     postAzanDelay: 30,
-    enabled: true,
     minutesBefore: 2,
-  });
+    announcePrayerName: true,
+  };
 
-  const settings = externalSettings || internalSettings;
-  const updateSettings = (updates: Partial<AzanSettings>) => {
-    const newSettings = { ...settings, ...updates };
+  const currentSettings = settings || defaultSettings;
+
+  const updateSettings = (updates: Partial<AzanPlayerSettings>) => {
     if (onSettingsChange) {
-      onSettingsChange(newSettings);
-    } else {
-      setInternalSettings(newSettings);
+      onSettingsChange(updates);
     }
   };
 
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(80);
-
-  const reciters = [
-    { id: "mishary", name: "Mishary Rashid Alafasy" },
-    { id: "sudais", name: "Abdul Rahman Al-Sudais" },
-    { id: "makkah", name: "Makkah Muazzin" },
-    { id: "madinah", name: "Madinah Muazzin" },
+  const musicStopOptions: { id: MusicStopMode; name: string; description: string }[] = [
+    { id: "fade", name: "Fade Out", description: "Gradually lower volume before stopping" },
+    { id: "immediate", name: "Immediate Stop", description: "Stop music instantly" },
   ];
 
   const postAzanOptions: { id: PostAzanAction; name: string; description: string }[] = [
@@ -67,13 +63,20 @@ export const AzanPlayer = ({
     { id: "quran", name: "Play Quran", description: "Start playing a Quran recitation" },
   ];
 
-  const handleTest = () => {
+  const handleTest = (prayerName?: string) => {
     if (onTestAzan) {
-      onTestAzan();
-    } else {
-      setIsPlaying(!isPlaying);
+      onTestAzan(prayerName);
     }
   };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onCustomAzanFile) {
+      onCustomAzanFile(file);
+    }
+  };
+
+  const isDefaultAzan = currentSettings.azanFile === "/audio/azan-default.mp3";
 
   return (
     <Card className="glass-panel">
@@ -84,17 +87,27 @@ export const AzanPlayer = ({
             Azan Player
           </CardTitle>
           <div className="flex items-center gap-3">
-            {(isAzanPlaying || isPlaying) && (
+            {isAzanPlaying && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-accent/20 border border-accent/30">
                 <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                <span className="text-xs font-medium text-accent">Playing</span>
+                <span className="text-xs font-medium text-accent">
+                  {currentPrayer ? `Playing ${currentPrayer}` : "Playing"}
+                </span>
+              </div>
+            )}
+            {!isAzanPlaying && nextScheduledPrayer && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <Clock className="h-3 w-3 text-primary" />
+                <span className="text-xs font-medium text-primary">
+                  Next: {nextScheduledPrayer}
+                </span>
               </div>
             )}
             <div className="flex items-center gap-2">
               <Label htmlFor="azan-enabled" className="text-sm text-muted-foreground">Auto</Label>
               <Switch
                 id="azan-enabled"
-                checked={settings.enabled}
+                checked={currentSettings.enabled}
                 onCheckedChange={(enabled) => updateSettings({ enabled })}
               />
             </div>
@@ -102,24 +115,58 @@ export const AzanPlayer = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Reciter Selection */}
-        <div className="space-y-2">
-          <Label className="text-sm text-muted-foreground">Muazzin / Reciter</Label>
-          <Select
-            value={settings.reciter}
-            onValueChange={(reciter) => updateSettings({ reciter })}
-          >
-            <SelectTrigger className="bg-secondary/50 border-border/50">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {reciters.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Custom Azan File */}
+        <div className="space-y-3">
+          <Label className="text-sm text-muted-foreground flex items-center gap-2">
+            <Music className="h-4 w-4" />
+            Azan Audio File
+          </Label>
+          <div className="flex gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {isDefaultAzan ? "Upload Custom Azan" : "Change Azan"}
+            </Button>
+            {!isDefaultAzan && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onResetToDefault}
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset to Default
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {isDefaultAzan ? "Using default azan" : "Using custom azan file"}
+          </p>
+        </div>
+
+        {/* Prayer Name Announcement */}
+        <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-accent" />
+            <div>
+              <Label className="text-sm font-medium">Announce Prayer Name</Label>
+              <p className="text-xs text-muted-foreground">Say prayer name before azan</p>
+            </div>
+          </div>
+          <Switch
+            checked={currentSettings.announcePrayerName}
+            onCheckedChange={(announcePrayerName) => updateSettings({ announcePrayerName })}
+          />
         </div>
 
         {/* Volume Control */}
@@ -129,13 +176,13 @@ export const AzanPlayer = ({
               <Volume2 className="h-4 w-4" />
               Azan Volume
             </Label>
-            <span className="text-sm font-medium text-foreground">{volume}%</span>
+            <span className="text-sm font-medium text-foreground">{currentSettings.volume}%</span>
           </div>
           <Slider
-            value={[volume]}
+            value={[currentSettings.volume]}
             max={100}
             step={1}
-            onValueChange={([v]) => setVolume(v)}
+            onValueChange={([v]) => updateSettings({ volume: v })}
           />
         </div>
 
@@ -144,12 +191,12 @@ export const AzanPlayer = ({
           <div className="flex items-center justify-between">
             <Label className="text-sm text-muted-foreground flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Start fade before prayer
+              Start before prayer
             </Label>
-            <span className="text-sm font-medium">{settings.minutesBefore} min</span>
+            <span className="text-sm font-medium">{currentSettings.minutesBefore} min</span>
           </div>
           <Slider
-            value={[settings.minutesBefore]}
+            value={[currentSettings.minutesBefore]}
             min={0}
             max={10}
             step={1}
@@ -157,28 +204,56 @@ export const AzanPlayer = ({
           />
         </div>
 
-        {/* Fade Controls */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Fade Out (seconds)</Label>
-            <Slider
-              value={[settings.fadeOutDuration]}
-              max={15}
-              step={1}
-              onValueChange={([v]) => updateSettings({ fadeOutDuration: v })}
-            />
-            <span className="text-xs text-muted-foreground">{settings.fadeOutDuration}s</span>
+        {/* Music Stop Mode */}
+        <div className="p-4 rounded-lg bg-secondary/30 space-y-4">
+          <div className="flex items-center gap-2">
+            <VolumeX className="h-4 w-4 text-accent" />
+            <Label className="text-sm font-medium">Music Stop Mode</Label>
           </div>
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Fade In (seconds)</Label>
-            <Slider
-              value={[settings.fadeInDuration]}
-              max={15}
-              step={1}
-              onValueChange={([v]) => updateSettings({ fadeInDuration: v })}
-            />
-            <span className="text-xs text-muted-foreground">{settings.fadeInDuration}s</span>
+          
+          <div className="grid grid-cols-2 gap-2">
+            {musicStopOptions.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => updateSettings({ musicStopMode: option.id })}
+                className={`p-3 rounded-lg text-left transition-all ${
+                  currentSettings.musicStopMode === option.id
+                    ? "bg-primary/20 border border-primary/30"
+                    : "bg-secondary/30 hover:bg-secondary/50 border border-transparent"
+                }`}
+              >
+                <p className={`font-medium text-sm ${currentSettings.musicStopMode === option.id ? "text-primary" : "text-foreground"}`}>
+                  {option.name}
+                </p>
+                <p className="text-xs text-muted-foreground">{option.description}</p>
+              </button>
+            ))}
           </div>
+
+          {currentSettings.musicStopMode === "fade" && (
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border/50">
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Fade Out</Label>
+                <Slider
+                  value={[currentSettings.fadeOutDuration]}
+                  max={15}
+                  step={1}
+                  onValueChange={([v]) => updateSettings({ fadeOutDuration: v })}
+                />
+                <span className="text-xs text-muted-foreground">{currentSettings.fadeOutDuration}s</span>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Fade In</Label>
+                <Slider
+                  value={[currentSettings.fadeInDuration]}
+                  max={15}
+                  step={1}
+                  onValueChange={([v]) => updateSettings({ fadeInDuration: v })}
+                />
+                <span className="text-xs text-muted-foreground">{currentSettings.fadeInDuration}s</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Post-Azan Settings */}
@@ -194,12 +269,12 @@ export const AzanPlayer = ({
                 key={option.id}
                 onClick={() => updateSettings({ postAzanAction: option.id })}
                 className={`w-full p-3 rounded-lg text-left transition-all ${
-                  settings.postAzanAction === option.id
+                  currentSettings.postAzanAction === option.id
                     ? "bg-primary/20 border border-primary/30"
                     : "bg-secondary/30 hover:bg-secondary/50 border border-transparent"
                 }`}
               >
-                <p className={`font-medium ${settings.postAzanAction === option.id ? "text-primary" : "text-foreground"}`}>
+                <p className={`font-medium ${currentSettings.postAzanAction === option.id ? "text-primary" : "text-foreground"}`}>
                   {option.name}
                 </p>
                 <p className="text-xs text-muted-foreground">{option.description}</p>
@@ -207,17 +282,17 @@ export const AzanPlayer = ({
             ))}
           </div>
 
-          {settings.postAzanAction !== "silence" && (
+          {currentSettings.postAzanAction !== "silence" && (
             <div className="space-y-2 pt-2 border-t border-border/50">
               <div className="flex items-center justify-between">
                 <Label className="text-sm text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Delay before action
                 </Label>
-                <span className="text-sm font-medium">{settings.postAzanDelay}s</span>
+                <span className="text-sm font-medium">{currentSettings.postAzanDelay}s</span>
               </div>
               <Slider
-                value={[settings.postAzanDelay]}
+                value={[currentSettings.postAzanDelay]}
                 max={120}
                 step={5}
                 onValueChange={([v]) => updateSettings({ postAzanDelay: v })}
@@ -228,14 +303,14 @@ export const AzanPlayer = ({
 
         {/* Test Button */}
         <Button
-          variant={(isAzanPlaying || isPlaying) ? "destructive" : "glow"}
+          variant={isAzanPlaying ? "destructive" : "glow"}
           className="w-full"
-          onClick={handleTest}
+          onClick={() => handleTest("Dhuhr")}
         >
-          {(isAzanPlaying || isPlaying) ? (
+          {isAzanPlaying ? (
             <>
               <Pause className="h-4 w-4 mr-2" />
-              Stop Test
+              Stop Azan
             </>
           ) : (
             <>
