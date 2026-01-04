@@ -141,17 +141,17 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             </div>
           </div>
 
-          {/* Filter Pills */}
+          {/* Navigation Pills */}
           <div className="flex gap-2">
             {(['all', 'music', 'podcasts'] as const).map((f) => (
               <Button
                 key={f}
                 variant={filter === f ? "default" : "secondary"}
                 size="sm"
-                className={`rounded-full h-8 px-4 capitalize ${
+                className={`rounded-full h-8 px-4 text-sm font-medium capitalize transition-all ${
                   filter === f 
                     ? 'bg-foreground text-background hover:bg-foreground/90' 
-                    : 'bg-secondary hover:bg-secondary/80'
+                    : 'bg-white/10 hover:bg-white/20 text-foreground border-0'
                 }`}
                 onClick={() => setFilter(f)}
               >
@@ -160,16 +160,17 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             ))}
           </div>
 
-          {/* Quick Play Grid */}
+          {/* Quick Access Grid - Rectangular Cards */}
           {recentItems.length > 0 && (
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {recentItems.map((item) => (
                 <div
                   key={item.id}
-                  className="quick-play-card group"
+                  className="group flex items-center gap-0 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all duration-200"
                   onClick={() => playItem(item)}
                 >
-                  <div className="w-12 h-12 flex-shrink-0">
+                  {/* Album Art */}
+                  <div className="w-16 h-16 flex-shrink-0 shadow-lg">
                     {item.image ? (
                       <img 
                         src={item.image} 
@@ -182,12 +183,14 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                       </div>
                     )}
                   </div>
-                  <span className="flex-1 font-medium text-sm truncate pr-2">
+                  {/* Title */}
+                  <span className="flex-1 font-semibold text-sm text-foreground truncate px-4">
                     {item.name}
                   </span>
+                  {/* Play Button - appears on hover */}
                   <Button
                     size="icon"
-                    className="play-btn h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-lg mr-2"
+                    className="h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-xl opacity-0 group-hover:opacity-100 mr-3 transition-all duration-200 hover:scale-105"
                   >
                     <Play className="h-5 w-5 fill-current ml-0.5" />
                   </Button>
@@ -215,25 +218,26 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       {/* Recently Played Section */}
       <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
 
-      {/* Made For You Section */}
+      {/* Made For You Section - Horizontal Scroll */}
       {madeForYou.length > 0 && (
-        <section className="p-6 space-y-4">
+        <section className="px-6 py-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Made For You</h2>
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline">
+            <h2 className="text-2xl font-bold text-foreground hover:underline cursor-pointer">Made For You</h2>
+            <button className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">
               Show all
             </button>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Horizontal Scrolling Container */}
+          <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
             {madeForYou.map((item: any) => (
               <div
                 key={item.id}
-                className="spotify-card group cursor-pointer"
+                className="flex-shrink-0 w-44 group cursor-pointer"
                 onClick={() => playItem({ id: item.id, name: item.name, image: item.images?.[0]?.url, uri: item.uri })}
               >
-                <div className="relative mb-4">
-                  <div className="aspect-square rounded-md overflow-hidden shadow-lg">
+                <div className="relative mb-3">
+                  <div className="aspect-square rounded-lg overflow-hidden shadow-lg bg-secondary">
                     {item.images?.[0]?.url ? (
                       <img 
                         src={item.images[0].url} 
@@ -241,21 +245,22 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-secondary flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
                         <SpotifyIcon />
                       </div>
                     )}
                   </div>
+                  {/* Play Button */}
                   <Button
                     size="icon"
-                    className="play-btn absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all"
+                    className="absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-2xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-105"
                   >
                     <Play className="h-6 w-6 fill-current ml-0.5" />
                   </Button>
                 </div>
-                <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
-                <p className="text-sm text-muted-foreground truncate mt-1">
-                  {item.tracks?.total || 0} tracks
+                <h3 className="font-semibold text-foreground truncate text-sm">{item.name}</h3>
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                  Made for you
                 </p>
               </div>
             ))}
@@ -263,25 +268,26 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         </section>
       )}
 
-      {/* Your Top Mixes */}
+      {/* Your Top Mixes Section - Horizontal Scroll */}
       {topMixes.length > 0 && (
-        <section className="p-6 space-y-4 pb-32">
+        <section className="px-6 py-4 space-y-4 pb-32">
           <div className="flex items-center justify-between">
-            <h2 className="section-title">Your Library</h2>
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline">
+            <h2 className="text-2xl font-bold text-foreground hover:underline cursor-pointer">Your top mixes</h2>
+            <button className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">
               Show all
             </button>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+          {/* Horizontal Scrolling Container */}
+          <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
             {topMixes.map((item: any) => (
               <div
                 key={item.id}
-                className="spotify-card group cursor-pointer"
+                className="flex-shrink-0 w-44 group cursor-pointer"
                 onClick={() => playItem({ id: item.id, name: item.name, image: item.images?.[0]?.url, uri: item.uri })}
               >
-                <div className="relative mb-4">
-                  <div className="aspect-square rounded-md overflow-hidden shadow-lg">
+                <div className="relative mb-3">
+                  <div className="aspect-square rounded-lg overflow-hidden shadow-lg bg-secondary">
                     {item.images?.[0]?.url ? (
                       <img 
                         src={item.images[0].url} 
@@ -289,20 +295,21 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full bg-secondary flex items-center justify-center">
+                      <div className="w-full h-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
                         <SpotifyIcon />
                       </div>
                     )}
                   </div>
+                  {/* Play Button */}
                   <Button
                     size="icon"
-                    className="play-btn absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all"
+                    className="absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-2xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-105"
                   >
                     <Play className="h-6 w-6 fill-current ml-0.5" />
                   </Button>
                 </div>
                 <h3 className="font-semibold text-foreground truncate text-sm">{item.name}</h3>
-                <p className="text-xs text-muted-foreground truncate mt-1">
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
                   {item.description || `${item.tracks?.total || 0} tracks`}
                 </p>
               </div>
