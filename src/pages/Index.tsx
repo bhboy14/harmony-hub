@@ -266,7 +266,10 @@ const Index = () => {
                   onSettingsChange={azanScheduler.updateSettings}
                   onCustomAzanFile={azanScheduler.setCustomAzanFile}
                   onResetToDefault={azanScheduler.resetToDefaultAzan}
+                  onSetPrayerAnnouncement={azanScheduler.setPrayerAnnouncementAudio}
+                  onClearPrayerAnnouncement={azanScheduler.clearPrayerAnnouncementAudio}
                   nextScheduledPrayer={azanScheduler.nextScheduledPrayer}
+                  prayerList={azanScheduler.PRAYER_LIST}
                 />
               </div>
             )}

@@ -2,11 +2,11 @@ import { useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Volume2, Settings2, Clock, Play, Pause, Upload, RotateCcw, Music, VolumeX } from "lucide-react";
+import { Bell, Volume2, Settings2, Clock, Play, Pause, Upload, RotateCcw, Music, VolumeX, Mic, X, Check } from "lucide-react";
 import { AzanPlayerSettings, MusicStopMode, PostAzanAction } from "@/hooks/useAzanPlayer";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface AzanPlayerProps {
   isAzanPlaying?: boolean;
@@ -16,7 +16,10 @@ interface AzanPlayerProps {
   onSettingsChange?: (settings: Partial<AzanPlayerSettings>) => void;
   onCustomAzanFile?: (file: File) => void;
   onResetToDefault?: () => void;
+  onSetPrayerAnnouncement?: (prayer: string, file: File) => void;
+  onClearPrayerAnnouncement?: (prayer: string) => void;
   nextScheduledPrayer?: string | null;
+  prayerList?: string[];
 }
 
 export const AzanPlayer = ({ 
@@ -27,9 +30,13 @@ export const AzanPlayer = ({
   onSettingsChange,
   onCustomAzanFile,
   onResetToDefault,
+  onSetPrayerAnnouncement,
+  onClearPrayerAnnouncement,
   nextScheduledPrayer,
+  prayerList = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"],
 }: AzanPlayerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const announcementInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const defaultSettings: AzanPlayerSettings = {
     enabled: true,
@@ -42,6 +49,8 @@ export const AzanPlayer = ({
     postAzanDelay: 30,
     minutesBefore: 2,
     announcePrayerName: true,
+    useArabicAnnouncement: true,
+    prayerAnnouncements: {},
   };
 
   const currentSettings = settings || defaultSettings;
@@ -73,6 +82,13 @@ export const AzanPlayer = ({
     const file = e.target.files?.[0];
     if (file && onCustomAzanFile) {
       onCustomAzanFile(file);
+    }
+  };
+
+  const handleAnnouncementUpload = (prayer: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onSetPrayerAnnouncement) {
+      onSetPrayerAnnouncement(prayer, file);
     }
   };
 
@@ -154,20 +170,106 @@ export const AzanPlayer = ({
           </p>
         </div>
 
-        {/* Prayer Name Announcement */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-          <div className="flex items-center gap-2">
-            <Bell className="h-4 w-4 text-accent" />
-            <div>
-              <Label className="text-sm font-medium">Announce Prayer Name</Label>
-              <p className="text-xs text-muted-foreground">Say prayer name before azan</p>
+        {/* Prayer Announcements */}
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="w-full justify-between p-3 h-auto bg-secondary/30 hover:bg-secondary/50">
+              <div className="flex items-center gap-2">
+                <Mic className="h-4 w-4 text-accent" />
+                <div className="text-left">
+                  <p className="font-medium text-sm">Prayer Name Announcements</p>
+                  <p className="text-xs text-muted-foreground">Upload Arabic audio for each prayer</p>
+                </div>
+              </div>
+              <Settings2 className="h-4 w-4" />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3 space-y-3">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
+              <div>
+                <Label className="text-sm font-medium">Enable Announcements</Label>
+                <p className="text-xs text-muted-foreground">Say prayer name before azan</p>
+              </div>
+              <Switch
+                checked={currentSettings.announcePrayerName}
+                onCheckedChange={(announcePrayerName) => updateSettings({ announcePrayerName })}
+              />
             </div>
-          </div>
-          <Switch
-            checked={currentSettings.announcePrayerName}
-            onCheckedChange={(announcePrayerName) => updateSettings({ announcePrayerName })}
-          />
-        </div>
+
+            {currentSettings.announcePrayerName && (
+              <>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/20">
+                  <div>
+                    <Label className="text-sm font-medium">Use Arabic</Label>
+                    <p className="text-xs text-muted-foreground">Arabic names (fallback if no audio)</p>
+                  </div>
+                  <Switch
+                    checked={currentSettings.useArabicAnnouncement}
+                    onCheckedChange={(useArabicAnnouncement) => updateSettings({ useArabicAnnouncement })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Custom Audio per Prayer</Label>
+                  {prayerList.map((prayer) => {
+                    const hasCustom = !!currentSettings.prayerAnnouncements?.[prayer];
+                    return (
+                      <div key={prayer} className="flex items-center justify-between p-2 rounded-lg bg-secondary/10">
+                        <div className="flex items-center gap-2">
+                          {hasCustom ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Mic className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <span className="text-sm font-medium">{prayer}</span>
+                          {hasCustom && (
+                            <span className="text-xs text-green-500">Custom audio</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <input
+                            ref={(el) => { announcementInputRefs.current[prayer] = el; }}
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => handleAnnouncementUpload(prayer, e)}
+                            className="hidden"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => announcementInputRefs.current[prayer]?.click()}
+                          >
+                            <Upload className="h-3 w-3" />
+                          </Button>
+                          {hasCustom && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-destructive hover:text-destructive"
+                              onClick={() => onClearPrayerAnnouncement?.(prayer)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={() => handleTest(prayer)}
+                            disabled={isAzanPlaying}
+                          >
+                            <Play className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Volume Control */}
         <div className="space-y-3">
