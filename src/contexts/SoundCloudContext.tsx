@@ -251,6 +251,12 @@ export const SoundCloudProvider = ({ children }: { children: ReactNode }) => {
   // Handle callback from popup
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
+      // Validate origin matches our application to prevent malicious postMessage attacks
+      if (event.origin !== window.location.origin) {
+        console.warn('Rejected postMessage from untrusted origin:', event.origin);
+        return;
+      }
+      
       if (event.data?.type === "soundcloud-callback" && event.data.code) {
         setIsLoading(true);
         try {
