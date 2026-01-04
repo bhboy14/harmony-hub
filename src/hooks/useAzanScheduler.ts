@@ -170,5 +170,8 @@ export const useAzanScheduler = ({
     nextScheduledPrayer,
     setCustomAzanFile: azanPlayer.setCustomAzanFile,
     resetToDefaultAzan: azanPlayer.resetToDefaultAzan,
+    setPrayerAnnouncementAudio: azanPlayer.setPrayerAnnouncementAudio,
+    clearPrayerAnnouncementAudio: azanPlayer.clearPrayerAnnouncementAudio,
+    PRAYER_LIST: azanPlayer.PRAYER_LIST,
   };
 };
