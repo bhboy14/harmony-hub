@@ -23,6 +23,8 @@ interface UnifiedAudioContextType {
   progress: number;
   duration: number;
   volume: number;
+  isMuted: boolean;
+  isLoading: boolean;
   
   // Control functions
   play: () => Promise<void>;
@@ -30,7 +32,12 @@ interface UnifiedAudioContextType {
   next: () => Promise<void>;
   previous: () => Promise<void>;
   setVolume: (volume: number) => Promise<void>;
+  setGlobalVolume: (volume: number) => Promise<void>;
+  toggleMute: () => Promise<void>;
   seek: (positionMs: number) => Promise<void>;
+  
+  // Unified play function
+  playTrack: (track: PlayableTrack) => Promise<void>;
   
   // Source-specific controls
   playLocalTrack: (track: LocalTrackInfo) => Promise<void>;
@@ -73,7 +80,21 @@ export interface LocalTrackInfo {
   albumArt?: string;
 }
 
+export interface PlayableTrack {
+  id: string;
+  title: string;
+  artist: string;
+  albumArt?: string;
+  duration: number;
+  source: AudioSource;
+  externalId?: string; // Spotify URI or YouTube Video ID
+  url?: string; // Local file URL or stream URL
+}
+
 const UnifiedAudioContext = createContext<UnifiedAudioContextType | null>(null);
+
+// Cross-fade duration in ms
+const CROSSFADE_DURATION = 300;
 
 export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const spotify = useSpotify();
@@ -88,41 +109,115 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const [soundcloudTrack, setSoundcloudTrack] = useState<{ id: string; title: string; artist: string; albumArt?: string; duration: number } | null>(null);
   const [youtubeInfo, setYoutubeInfo] = useState<{ videoId: string; title: string } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(75);
+  const [isMuted, setIsMuted] = useState(false);
+  const [previousVolume, setPreviousVolume] = useState(75);
   
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const soundcloudAudioRef = useRef<HTMLAudioElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const progressIntervalRef = useRef<number | null>(null);
+  const crossfadeTimeoutRef = useRef<number | null>(null);
 
-  // Initialize local audio element
+  // Initialize local audio element with robust error handling
   useEffect(() => {
     localAudioRef.current = new Audio();
-    localAudioRef.current.volume = volume / 100;
+    localAudioRef.current.volume = isMuted ? 0 : volume / 100;
+    localAudioRef.current.preload = 'auto';
     
     const audio = localAudioRef.current;
     
     const handleEnded = () => {
       setIsPlaying(false);
       setProgress(0);
+      // Auto-advance to next track
+      handleAutoNext();
     };
     
     const handleTimeUpdate = () => {
-      if (audio) {
+      if (audio && activeSource === 'local') {
         setProgress(audio.currentTime * 1000);
-        setDuration(audio.duration * 1000 || 0);
+        setDuration((audio.duration || 0) * 1000);
       }
     };
     
-    const handleError = () => {
+    const handleCanPlay = () => {
+      setIsLoading(false);
+    };
+    
+    const handleWaiting = () => {
+      setIsLoading(true);
+    };
+    
+    const handleError = (e: Event) => {
+      const error = (e.target as HTMLAudioElement)?.error;
+      console.error('Local audio error:', error);
+      
       toast({
-        title: "Playback Error",
-        description: "Could not play this track",
+        title: "Track unavailable, skipping to next",
+        description: error?.message || "Could not play this track",
         variant: "destructive"
       });
+      
       setIsPlaying(false);
+      setIsLoading(false);
+      
+      // Auto-skip to next track
+      setTimeout(() => handleAutoNext(), 500);
+    };
+    
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('timeupdate', handleTimeUpdate);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('waiting', handleWaiting);
+    audio.addEventListener('error', handleError);
+    
+    return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('timeupdate', handleTimeUpdate);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('waiting', handleWaiting);
+      audio.removeEventListener('error', handleError);
+      audio.pause();
+    };
+  }, [toast]);
+
+  // Initialize SoundCloud audio element
+  useEffect(() => {
+    soundcloudAudioRef.current = new Audio();
+    soundcloudAudioRef.current.volume = isMuted ? 0 : volume / 100;
+    soundcloudAudioRef.current.preload = 'auto';
+    
+    const audio = soundcloudAudioRef.current;
+    
+    const handleEnded = () => {
+      setIsPlaying(false);
+      setProgress(0);
+      handleAutoNext();
+    };
+    
+    const handleTimeUpdate = () => {
+      if (audio && activeSource === 'soundcloud') {
+        setProgress(audio.currentTime * 1000);
+        setDuration((audio.duration || 0) * 1000);
+      }
+    };
+    
+    const handleError = (e: Event) => {
+      const error = (e.target as HTMLAudioElement)?.error;
+      console.error('SoundCloud audio error:', error);
+      
+      toast({
+        title: "Track unavailable, skipping to next",
+        description: "Could not play this SoundCloud track",
+        variant: "destructive"
+      });
+      
+      setIsPlaying(false);
+      setTimeout(() => handleAutoNext(), 500);
     };
     
     audio.addEventListener('ended', handleEnded);
@@ -137,46 +232,28 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [toast]);
 
-  // Initialize SoundCloud audio element
-  useEffect(() => {
-    soundcloudAudioRef.current = new Audio();
-    soundcloudAudioRef.current.volume = volume / 100;
-    
-    const audio = soundcloudAudioRef.current;
-    
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setProgress(0);
-      // Auto-play next in queue
-      handleQueueNext();
-    };
-    
-    const handleTimeUpdate = () => {
-      if (audio && activeSource === 'soundcloud') {
-        setProgress(audio.currentTime * 1000);
-        setDuration(audio.duration * 1000 || 0);
-      }
-    };
-    
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    
-    return () => {
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.pause();
-    };
-  }, []);
+  // Auto-advance to next track
+  const handleAutoNext = useCallback(async () => {
+    const nextTrack = queueManager.goToNext();
+    if (nextTrack) {
+      await playQueueTrackInternal(nextTrack);
+    }
+  }, [queueManager]);
 
-  // Update volume on local audio when volume changes
+  // Update volume on all audio sources when volume changes
   useEffect(() => {
+    const effectiveVolume = isMuted ? 0 : volume / 100;
+    
     if (localAudioRef.current) {
-      localAudioRef.current.volume = volume / 100;
+      localAudioRef.current.volume = effectiveVolume;
     }
     if (soundcloudAudioRef.current) {
-      soundcloudAudioRef.current.volume = volume / 100;
+      soundcloudAudioRef.current.volume = effectiveVolume;
     }
-  }, [volume]);
+    if (youtubePlayerRef.current?.setVolume) {
+      youtubePlayerRef.current.setVolume(isMuted ? 0 : volume);
+    }
+  }, [volume, isMuted]);
 
   // Sync with Spotify state when Spotify is active
   useEffect(() => {
@@ -184,31 +261,61 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       setIsPlaying(spotify.playbackState.isPlaying);
       setProgress(spotify.playbackState.progress);
       setDuration(spotify.playbackState.track?.duration_ms || 0);
-      setVolumeState(spotify.playbackState.volume || 75);
     }
   }, [activeSource, spotify.playbackState]);
 
   // Auto-detect Spotify as active source when it starts playing
   useEffect(() => {
     if (spotify.playbackState?.isPlaying && activeSource !== 'spotify') {
-      // Pause other sources
-      pauseAllExcept('spotify');
+      stopAllSources();
       setActiveSourceState('spotify');
     }
   }, [spotify.playbackState?.isPlaying]);
 
-  const pauseAllExcept = useCallback((except: AudioSource) => {
-    if (except !== 'local' && localAudioRef.current) {
+  // Stop all audio sources with cross-fade
+  const stopAllSources = useCallback(async () => {
+    // Clear any pending crossfade
+    if (crossfadeTimeoutRef.current) {
+      clearTimeout(crossfadeTimeoutRef.current);
+    }
+
+    // Immediate stop without fade for quick switching
+    if (localAudioRef.current) {
+      localAudioRef.current.pause();
+      localAudioRef.current.currentTime = 0;
+    }
+    if (soundcloudAudioRef.current) {
+      soundcloudAudioRef.current.pause();
+      soundcloudAudioRef.current.currentTime = 0;
+    }
+    if (youtubePlayerRef.current?.pauseVideo) {
+      youtubePlayerRef.current.pauseVideo();
+    }
+    if (spotify.playbackState?.isPlaying) {
+      await spotify.pause();
+    }
+  }, [spotify]);
+
+  // Pause all sources except specified one
+  const pauseAllExcept = useCallback(async (except: AudioSource) => {
+    if (except !== 'local' && localAudioRef.current && !localAudioRef.current.paused) {
       localAudioRef.current.pause();
     }
-    if (except !== 'soundcloud' && soundcloudAudioRef.current) {
+    if (except !== 'soundcloud' && soundcloudAudioRef.current && !soundcloudAudioRef.current.paused) {
       soundcloudAudioRef.current.pause();
     }
     if (except !== 'youtube' && youtubePlayerRef.current?.pauseVideo) {
-      youtubePlayerRef.current.pauseVideo();
+      try {
+        const state = youtubePlayerRef.current.getPlayerState?.();
+        if (state === 1) { // Playing
+          youtubePlayerRef.current.pauseVideo();
+        }
+      } catch (e) {
+        // YouTube player might not be ready
+      }
     }
     if (except !== 'spotify' && spotify.playbackState?.isPlaying) {
-      spotify.pause();
+      await spotify.pause();
     }
   }, [spotify]);
 
@@ -219,64 +326,125 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeSource, pauseAllExcept]);
 
-  // Handle queue next track
-  const handleQueueNext = useCallback(async () => {
-    const nextTrack = queueManager.goToNext();
-    if (nextTrack) {
-      await playQueueTrackInternal(nextTrack);
+  // Unified playTrack function - the heart of the audio engine
+  const playTrack = useCallback(async (track: PlayableTrack) => {
+    setIsLoading(true);
+    
+    // Stop all current playback first (cross-fade)
+    await stopAllSources();
+    
+    try {
+      switch (track.source) {
+        case 'spotify':
+          if (track.externalId) {
+            // Check if Spotify is connected
+            if (!spotify.isConnected) {
+              toast({
+                title: "Spotify not connected",
+                description: "Please connect your Spotify account first",
+                variant: "destructive"
+              });
+              setIsLoading(false);
+              return;
+            }
+            
+            try {
+              await spotify.play(track.externalId);
+              setActiveSourceState('spotify');
+            } catch (error: any) {
+              // Handle insufficient scope or 400 errors
+              if (error?.message?.includes('scope') || error?.message?.includes('400')) {
+                toast({
+                  title: "Spotify authorization required",
+                  description: "Please reconnect Spotify with streaming permissions",
+                  variant: "destructive"
+                });
+                // Could trigger re-auth here
+              } else {
+                throw error;
+              }
+            }
+          }
+          break;
+          
+        case 'local':
+          if (localAudioRef.current && track.url) {
+            localAudioRef.current.src = track.url;
+            await localAudioRef.current.play();
+            
+            setLocalTrack({
+              id: track.id,
+              title: track.title,
+              artist: track.artist,
+              duration: formatMsToString(track.duration),
+              url: track.url,
+              albumArt: track.albumArt,
+            });
+            setActiveSourceState('local');
+            setIsPlaying(true);
+            setDuration(track.duration);
+            setProgress(0);
+          }
+          break;
+          
+        case 'soundcloud':
+          if (soundcloudAudioRef.current && track.url) {
+            soundcloudAudioRef.current.src = track.url;
+            await soundcloudAudioRef.current.play();
+            
+            setSoundcloudTrack({
+              id: track.id,
+              title: track.title,
+              artist: track.artist,
+              albumArt: track.albumArt,
+              duration: track.duration,
+            });
+            setActiveSourceState('soundcloud');
+            setIsPlaying(true);
+            setDuration(track.duration);
+            setProgress(0);
+          }
+          break;
+          
+        case 'youtube':
+          if (track.externalId) {
+            setYoutubeInfo({ videoId: track.externalId, title: track.title });
+            setActiveSourceState('youtube');
+            // YouTube player will auto-play when videoId changes
+          }
+          break;
+          
+        default:
+          throw new Error(`Unknown source: ${track.source}`);
+      }
+    } catch (error) {
+      console.error('Playback error:', error);
+      toast({
+        title: "Track unavailable, skipping to next",
+        description: "Could not play this track",
+        variant: "destructive"
+      });
+      
+      // Auto-skip to next
+      setTimeout(() => handleAutoNext(), 500);
+    } finally {
+      setIsLoading(false);
     }
-  }, [queueManager]);
+  }, [spotify, stopAllSources, toast, handleAutoNext]);
 
   // Play a track from the queue
   const playQueueTrackInternal = useCallback(async (track: QueueTrack) => {
-    pauseAllExcept(track.source);
-    
-    switch (track.source) {
-      case 'spotify':
-        if (track.externalId) {
-          await spotify.play(`spotify:track:${track.externalId}`);
-        }
-        setActiveSourceState('spotify');
-        break;
-      case 'local':
-        if (localAudioRef.current && track.url) {
-          localAudioRef.current.src = track.url;
-          await localAudioRef.current.play();
-          setLocalTrack({
-            id: track.id,
-            title: track.title,
-            artist: track.artist,
-            duration: formatMsToString(track.duration),
-            url: track.url,
-            albumArt: track.albumArt,
-          });
-          setActiveSourceState('local');
-          setIsPlaying(true);
-        }
-        break;
-      case 'soundcloud':
-        if (soundcloudAudioRef.current && track.url) {
-          soundcloudAudioRef.current.src = track.url;
-          await soundcloudAudioRef.current.play();
-          setSoundcloudTrack({
-            id: track.id,
-            title: track.title,
-            artist: track.artist,
-            albumArt: track.albumArt,
-            duration: track.duration,
-          });
-          setActiveSourceState('soundcloud');
-          setIsPlaying(true);
-        }
-        break;
-      case 'youtube':
-        if (track.externalId) {
-          setYoutubeInfo({ videoId: track.externalId, title: track.title });
-          setActiveSourceState('youtube');
-        }
-        break;
-    }
-  }, [pauseAllExcept, spotify]);
+    await playTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      albumArt: track.albumArt,
+      duration: track.duration,
+      source: track.source,
+      externalId: track.externalId,
+      url: track.url,
+    });
+  }, [playTrack]);
 
   const formatMsToString = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
@@ -338,7 +506,6 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   }, [activeSource, spotify]);
 
   const next = useCallback(async () => {
-    // Use queue if available
     const nextTrack = queueManager.goToNext();
     if (nextTrack) {
       await playQueueTrackInternal(nextTrack);
@@ -348,7 +515,6 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   }, [activeSource, spotify, queueManager, playQueueTrackInternal]);
 
   const previous = useCallback(async () => {
-    // Use queue if available
     const prevTrack = queueManager.goToPrevious();
     if (prevTrack) {
       await playQueueTrackInternal(prevTrack);
@@ -357,8 +523,10 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeSource, spotify, queueManager, playQueueTrackInternal]);
 
+  // Set volume for current source
   const setVolume = useCallback(async (newVolume: number) => {
     setVolumeState(newVolume);
+    setIsMuted(newVolume === 0);
     
     switch (activeSource) {
       case 'spotify':
@@ -382,6 +550,44 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeSource, spotify]);
 
+  // Set global volume across ALL sources at once
+  const setGlobalVolume = useCallback(async (newVolume: number) => {
+    setVolumeState(newVolume);
+    setIsMuted(newVolume === 0);
+    
+    const volumeRatio = newVolume / 100;
+    
+    // Update all sources simultaneously
+    if (localAudioRef.current) {
+      localAudioRef.current.volume = volumeRatio;
+    }
+    if (soundcloudAudioRef.current) {
+      soundcloudAudioRef.current.volume = volumeRatio;
+    }
+    if (youtubePlayerRef.current?.setVolume) {
+      youtubePlayerRef.current.setVolume(newVolume);
+    }
+    if (spotify.isConnected) {
+      try {
+        await spotify.setVolume(newVolume);
+      } catch (e) {
+        // Spotify volume might fail if no active device
+      }
+    }
+  }, [spotify]);
+
+  // Toggle mute with memory of previous volume
+  const toggleMute = useCallback(async () => {
+    if (isMuted) {
+      await setGlobalVolume(previousVolume || 75);
+      setIsMuted(false);
+    } else {
+      setPreviousVolume(volume);
+      await setGlobalVolume(0);
+      setIsMuted(true);
+    }
+  }, [isMuted, previousVolume, volume, setGlobalVolume]);
+
   const seek = useCallback(async (positionMs: number) => {
     switch (activeSource) {
       case 'local':
@@ -402,35 +608,39 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
           setProgress(positionMs);
         }
         break;
-      // Spotify seek would require additional API implementation
+      case 'spotify':
+        // Spotify seek would require additional API implementation
+        break;
     }
   }, [activeSource]);
 
   const playLocalTrack = useCallback(async (track: LocalTrackInfo) => {
     if (!localAudioRef.current) return;
     
-    // Pause other sources
-    pauseAllExcept('local');
+    setIsLoading(true);
+    await pauseAllExcept('local');
     
     try {
       localAudioRef.current.pause();
       
+      let audioUrl: string;
       if (track.fileHandle) {
         const file = await track.fileHandle.getFile();
-        const url = URL.createObjectURL(file);
-        localAudioRef.current.src = url;
+        audioUrl = URL.createObjectURL(file);
       } else if (track.url) {
-        localAudioRef.current.src = track.url;
+        audioUrl = track.url;
       } else {
         throw new Error('No audio source');
       }
       
+      localAudioRef.current.src = audioUrl;
       await localAudioRef.current.play();
+      
       setLocalTrack(track);
       setActiveSourceState('local');
       setIsPlaying(true);
       
-      // Parse duration string to ms (format: "M:SS" or "H:MM:SS")
+      // Parse duration string to ms
       const parts = track.duration.split(':').map(Number);
       let durationMs = 0;
       if (parts.length === 2) {
@@ -443,12 +653,15 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       console.error('Play error:', err);
       toast({
-        title: "Playback Error",
+        title: "Track unavailable, skipping to next",
         description: "Could not play this track",
         variant: "destructive"
       });
+      setTimeout(() => handleAutoNext(), 500);
+    } finally {
+      setIsLoading(false);
     }
-  }, [pauseAllExcept, toast]);
+  }, [pauseAllExcept, toast, handleAutoNext]);
 
   const playYouTubeVideo = useCallback((videoId: string, title: string) => {
     pauseAllExcept('youtube');
@@ -459,7 +672,8 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const playSoundCloudTrack = useCallback(async (track: { id: string; title: string; artist: string; albumArt?: string; duration: number; streamUrl: string }) => {
     if (!soundcloudAudioRef.current) return;
     
-    pauseAllExcept('soundcloud');
+    setIsLoading(true);
+    await pauseAllExcept('soundcloud');
     
     try {
       soundcloudAudioRef.current.pause();
@@ -480,15 +694,23 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     } catch (err) {
       console.error('SoundCloud play error:', err);
       toast({
-        title: "Playback Error",
+        title: "Track unavailable, skipping to next",
         description: "Could not play this track",
         variant: "destructive"
       });
+      setTimeout(() => handleAutoNext(), 500);
+    } finally {
+      setIsLoading(false);
     }
-  }, [pauseAllExcept, toast]);
+  }, [pauseAllExcept, toast, handleAutoNext]);
 
   const registerYouTubePlayer = useCallback((player: any) => {
     youtubePlayerRef.current = player;
+    
+    // Apply current volume to YouTube player
+    if (player?.setVolume) {
+      player.setVolume(isMuted ? 0 : volume);
+    }
     
     // Set up YouTube progress tracking
     if (progressIntervalRef.current) {
@@ -497,13 +719,21 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     
     progressIntervalRef.current = window.setInterval(() => {
       if (youtubePlayerRef.current && activeSource === 'youtube') {
-        const currentTime = youtubePlayerRef.current.getCurrentTime?.() || 0;
-        const totalDuration = youtubePlayerRef.current.getDuration?.() || 0;
-        setProgress(currentTime * 1000);
-        setDuration(totalDuration * 1000);
+        try {
+          const currentTime = youtubePlayerRef.current.getCurrentTime?.() || 0;
+          const totalDuration = youtubePlayerRef.current.getDuration?.() || 0;
+          setProgress(currentTime * 1000);
+          setDuration(totalDuration * 1000);
+          
+          // Update isPlaying state from YouTube
+          const state = youtubePlayerRef.current.getPlayerState?.();
+          setIsPlaying(state === 1); // 1 = playing
+        } catch (e) {
+          // Player might not be ready
+        }
       }
-    }, 1000);
-  }, [activeSource]);
+    }, 500);
+  }, [activeSource, volume, isMuted]);
 
   const unregisterYouTubePlayer = useCallback(() => {
     youtubePlayerRef.current = null;
@@ -578,6 +808,18 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   })();
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      if (crossfadeTimeoutRef.current) {
+        clearTimeout(crossfadeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <UnifiedAudioContext.Provider
       value={{
@@ -587,12 +829,17 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
         progress: activeSource === 'spotify' ? (spotify.playbackState?.progress ?? 0) : progress,
         duration: activeSource === 'spotify' ? (spotify.playbackState?.track?.duration_ms ?? 0) : duration,
         volume,
+        isMuted,
+        isLoading,
         play,
         pause,
         next,
         previous,
         setVolume,
+        setGlobalVolume,
+        toggleMute,
         seek,
+        playTrack,
         playLocalTrack,
         playYouTubeVideo,
         playSoundCloudTrack,
