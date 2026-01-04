@@ -75,6 +75,11 @@ interface SpotifyPlaylist {
   tracks: { total: number };
 }
 
+interface SpotifyRecentlyPlayedItem {
+  track: SpotifyTrack;
+  played_at: string;
+}
+
 interface SpotifyContextType {
   isConnected: boolean;
   isLoading: boolean;
@@ -83,6 +88,7 @@ interface SpotifyContextType {
   devices: SpotifyDevice[];
   playlists: SpotifyPlaylist[];
   savedTracks: SpotifyTrack[];
+  recentlyPlayed: SpotifyRecentlyPlayedItem[];
   webPlayerReady: boolean;
   webPlayerDeviceId: string | null;
   connect: () => Promise<void>;
@@ -97,6 +103,7 @@ interface SpotifyContextType {
   refreshPlaybackState: () => Promise<void>;
   loadPlaylists: () => Promise<void>;
   loadSavedTracks: () => Promise<void>;
+  loadRecentlyPlayed: () => Promise<void>;
   activateWebPlayer: () => Promise<void>;
 }
 
@@ -111,6 +118,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [savedTracks, setSavedTracks] = useState<SpotifyTrack[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<SpotifyRecentlyPlayedItem[]>([]);
   const [webPlayerReady, setWebPlayerReady] = useState(false);
   const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
@@ -397,18 +405,20 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     return () => clearInterval(interval);
   }, [tokens, refreshPlaybackState]);
 
-  // Auto-load playlists and saved tracks when connected
+  // Auto-load playlists, saved tracks, and recently played when connected
   useEffect(() => {
     if (!tokens) return;
 
     const loadUserData = async () => {
       try {
-        const [playlistsData, tracksData] = await Promise.all([
+        const [playlistsData, tracksData, recentData] = await Promise.all([
           callSpotifyApi("get_playlists"),
           callSpotifyApi("get_saved_tracks"),
+          callSpotifyApi("get_recently_played"),
         ]);
         setPlaylists(playlistsData?.items || []);
         setSavedTracks(tracksData?.items?.map((i: any) => i.track) || []);
+        setRecentlyPlayed(recentData?.items || []);
       } catch (error) {
         console.error("Failed to load Spotify data:", error);
       }
@@ -494,6 +504,15 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const loadSavedTracks = useCallback(async () => {
     const data = await callSpotifyApi("get_saved_tracks");
     setSavedTracks(data?.items?.map((i: any) => i.track) || []);
+  }, [callSpotifyApi]);
+
+  const loadRecentlyPlayed = useCallback(async () => {
+    try {
+      const data = await callSpotifyApi("get_recently_played");
+      setRecentlyPlayed(data?.items || []);
+    } catch (error) {
+      console.error("Failed to load recently played:", error);
+    }
   }, [callSpotifyApi]);
 
   // Load Spotify Web Playback SDK
@@ -645,6 +664,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         devices,
         playlists,
         savedTracks,
+        recentlyPlayed,
         webPlayerReady,
         webPlayerDeviceId,
         connect,
@@ -659,6 +679,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         refreshPlaybackState,
         loadPlaylists,
         loadSavedTracks,
+        loadRecentlyPlayed,
         activateWebPlayer,
       }}
     >
