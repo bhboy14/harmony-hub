@@ -76,17 +76,12 @@ const Index = () => {
     }
   }, [spotify]);
 
-  const handlePlayAzan = useCallback(async () => {
-    toast({ title: "Azan", description: "Playing Azan..." });
-  }, [toast]);
-
   const azanScheduler = useAzanScheduler({
     prayerTimes,
     onFadeOut: handleFadeOut,
     onFadeIn: handleFadeIn,
     onPause: handlePause,
     onResume: handleResume,
-    onPlayAzan: handlePlayAzan,
     isPlaying: spotify.playbackState?.isPlaying || false,
   });
 
@@ -265,27 +260,13 @@ const Index = () => {
                 </div>
                 <AzanPlayer 
                   isAzanPlaying={azanScheduler.isAzanPlaying}
+                  currentPrayer={azanScheduler.currentPrayer}
                   onTestAzan={azanScheduler.testAzanSequence}
-                  settings={{
-                    reciter: "mishary",
-                    fadeInDuration: azanScheduler.settings.fadeInDuration,
-                    fadeOutDuration: azanScheduler.settings.fadeOutDuration,
-                    postAzanAction: azanScheduler.settings.postAzanAction,
-                    postAzanDelay: azanScheduler.settings.postAzanDelay,
-                    enabled: azanScheduler.settings.enabled,
-                    minutesBefore: azanScheduler.settings.minutesBefore,
-                  }}
-                  onSettingsChange={(newSettings) => {
-                    azanScheduler.setSettings({
-                      ...azanScheduler.settings,
-                      fadeInDuration: newSettings.fadeInDuration,
-                      fadeOutDuration: newSettings.fadeOutDuration,
-                      postAzanAction: newSettings.postAzanAction,
-                      postAzanDelay: newSettings.postAzanDelay,
-                      enabled: newSettings.enabled,
-                      minutesBefore: newSettings.minutesBefore,
-                    });
-                  }}
+                  settings={azanScheduler.settings}
+                  onSettingsChange={azanScheduler.updateSettings}
+                  onCustomAzanFile={azanScheduler.setCustomAzanFile}
+                  onResetToDefault={azanScheduler.resetToDefaultAzan}
+                  nextScheduledPrayer={azanScheduler.nextScheduledPrayer}
                 />
               </div>
             )}

@@ -1,16 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { PrayerTime } from "@/hooks/usePrayerTimes";
+import { useAzanPlayer, AzanPlayerSettings, MusicStopMode, PostAzanAction } from "@/hooks/useAzanPlayer";
 
-export type PostAzanAction = "resume" | "silence" | "quran" | "custom";
-
-interface AzanScheduleSettings {
-  enabled: boolean;
-  fadeOutDuration: number; // seconds
-  fadeInDuration: number; // seconds
-  postAzanAction: PostAzanAction;
-  postAzanDelay: number; // seconds
-  minutesBefore: number; // minutes before prayer to start fade
-}
+export type { PostAzanAction, MusicStopMode };
 
 interface UseAzanSchedulerProps {
   prayerTimes: PrayerTime[];
@@ -18,7 +10,6 @@ interface UseAzanSchedulerProps {
   onFadeIn: (durationMs: number) => Promise<void>;
   onPause: () => Promise<void>;
   onResume: () => Promise<void>;
-  onPlayAzan: () => Promise<void>;
   onPlayQuran?: () => Promise<void>;
   isPlaying: boolean;
 }
@@ -29,29 +20,43 @@ export const useAzanScheduler = ({
   onFadeIn,
   onPause,
   onResume,
-  onPlayAzan,
   onPlayQuran,
   isPlaying,
 }: UseAzanSchedulerProps) => {
-  const [settings, setSettings] = useState<AzanScheduleSettings>({
-    enabled: true,
-    fadeOutDuration: 5,
-    fadeInDuration: 3,
-    postAzanAction: "resume",
-    postAzanDelay: 30,
-    minutesBefore: 2,
-  });
+  const azanPlayer = useAzanPlayer();
+  const { settings, startAzanSequence, stopAzan } = azanPlayer;
 
-  const [isAzanPlaying, setIsAzanPlaying] = useState(false);
   const [wasPlayingBeforeAzan, setWasPlayingBeforeAzan] = useState(false);
+  const [nextScheduledPrayer, setNextScheduledPrayer] = useState<string | null>(null);
   const scheduledTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const azanEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const postAzanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Stop music based on user preference (fade or immediate)
+  const stopMusic = useCallback(async () => {
+    if (!isPlaying) return;
+
+    if (settings.musicStopMode === "fade") {
+      await onFadeOut(settings.fadeOutDuration * 1000);
+    }
+    await onPause();
+  }, [isPlaying, settings.musicStopMode, settings.fadeOutDuration, onFadeOut, onPause]);
+
+  // Resume music based on settings
+  const resumeMusic = useCallback(async () => {
+    if (!wasPlayingBeforeAzan) return;
+
+    await onResume();
+    if (settings.musicStopMode === "fade") {
+      await onFadeIn(settings.fadeInDuration * 1000);
+    }
+  }, [wasPlayingBeforeAzan, settings.musicStopMode, settings.fadeInDuration, onResume, onFadeIn]);
 
   const scheduleNextAzan = useCallback(() => {
     if (!settings.enabled) return;
 
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentSeconds = now.getSeconds();
 
     // Find next prayer time (excluding sunrise)
     const prayersWithAzan = prayerTimes.filter(p => p.name !== "Sunrise");
@@ -76,59 +81,47 @@ export const useAzanScheduler = ({
 
     if (!nextPrayer) return;
 
-    // Calculate when to start fade (minutes before)
-    const fadeStartMinutes = nextPrayerMinutes - settings.minutesBefore;
-    const msUntilFade = (fadeStartMinutes - currentMinutes) * 60 * 1000;
+    // Calculate when to start (minutes before)
+    const startMinutes = nextPrayerMinutes - settings.minutesBefore;
+    const msUntilStart = ((startMinutes - currentMinutes) * 60 - currentSeconds) * 1000;
 
-    if (msUntilFade > 0 && msUntilFade < 24 * 60 * 60 * 1000) {
-      console.log(`Scheduling Azan for ${nextPrayer.name} in ${Math.round(msUntilFade / 60000)} minutes`);
+    if (msUntilStart > 0 && msUntilStart < 24 * 60 * 60 * 1000) {
+      console.log(`Scheduling Azan for ${nextPrayer.name} in ${Math.round(msUntilStart / 60000)} minutes`);
+      setNextScheduledPrayer(nextPrayer.name);
       
       if (scheduledTimeoutRef.current) {
         clearTimeout(scheduledTimeoutRef.current);
       }
 
       scheduledTimeoutRef.current = setTimeout(async () => {
-        await triggerAzanSequence();
-      }, msUntilFade);
+        await triggerAzanSequence(nextPrayer!.name);
+      }, msUntilStart);
     }
-  }, [prayerTimes, settings]);
+  }, [prayerTimes, settings.enabled, settings.minutesBefore]);
 
-  const triggerAzanSequence = useCallback(async () => {
-    console.log("Starting Azan sequence...");
+  const triggerAzanSequence = useCallback(async (prayerName: string) => {
+    console.log(`Starting Azan sequence for ${prayerName}...`);
     setWasPlayingBeforeAzan(isPlaying);
-    setIsAzanPlaying(true);
 
     try {
-      // Step 1: Fade out current music
-      if (isPlaying) {
-        await onFadeOut(settings.fadeOutDuration * 1000);
-        await onPause();
-      }
+      // Step 1: Stop current music (fade or immediate based on settings)
+      await stopMusic();
 
-      // Step 2: Play Azan (assume 3-4 minutes)
-      await onPlayAzan();
+      // Step 2: Play prayer announcement + Azan
+      await startAzanSequence(prayerName);
       
-      // Step 3: After Azan ends (simulated with timeout for now)
-      const azanDuration = 180000; // 3 minutes
-      
-      azanEndTimeoutRef.current = setTimeout(async () => {
-        setIsAzanPlaying(false);
-
-        // Wait for post-azan delay
-        await new Promise(r => setTimeout(r, settings.postAzanDelay * 1000));
-
-        // Execute post-azan action
+      // Step 3: Handle post-azan actions after delay
+      postAzanTimeoutRef.current = setTimeout(async () => {
         switch (settings.postAzanAction) {
           case "resume":
-            if (wasPlayingBeforeAzan) {
-              await onResume();
-              await onFadeIn(settings.fadeInDuration * 1000);
-            }
+            await resumeMusic();
             break;
           case "quran":
             if (onPlayQuran) {
               await onPlayQuran();
-              await onFadeIn(settings.fadeInDuration * 1000);
+              if (settings.musicStopMode === "fade") {
+                await onFadeIn(settings.fadeInDuration * 1000);
+              }
             }
             break;
           case "silence":
@@ -139,32 +132,43 @@ export const useAzanScheduler = ({
 
         // Schedule the next prayer
         scheduleNextAzan();
-      }, azanDuration);
+      }, settings.postAzanDelay * 1000);
     } catch (error) {
       console.error("Azan sequence error:", error);
-      setIsAzanPlaying(false);
+      // Schedule next anyway
+      scheduleNextAzan();
     }
-  }, [isPlaying, settings, onFadeOut, onFadeIn, onPause, onResume, onPlayAzan, onPlayQuran, wasPlayingBeforeAzan, scheduleNextAzan]);
+  }, [isPlaying, settings, stopMusic, resumeMusic, startAzanSequence, onPlayQuran, onFadeIn, scheduleNextAzan]);
 
   // Schedule when settings or prayer times change
   useEffect(() => {
     scheduleNextAzan();
     return () => {
       if (scheduledTimeoutRef.current) clearTimeout(scheduledTimeoutRef.current);
-      if (azanEndTimeoutRef.current) clearTimeout(azanEndTimeoutRef.current);
+      if (postAzanTimeoutRef.current) clearTimeout(postAzanTimeoutRef.current);
     };
   }, [scheduleNextAzan]);
 
   // Manual trigger for testing
-  const testAzanSequence = useCallback(async () => {
-    await triggerAzanSequence();
-  }, [triggerAzanSequence]);
+  const testAzanSequence = useCallback(async (prayerName?: string) => {
+    if (azanPlayer.isPlaying) {
+      stopAzan();
+    } else {
+      await triggerAzanSequence(prayerName || "Test");
+    }
+  }, [azanPlayer.isPlaying, stopAzan, triggerAzanSequence]);
 
   return {
-    settings,
-    setSettings,
-    isAzanPlaying,
+    settings: azanPlayer.settings,
+    updateSettings: azanPlayer.updateSettings,
+    setSettings: azanPlayer.updateSettings,
+    isAzanPlaying: azanPlayer.isPlaying,
+    currentPrayer: azanPlayer.currentPrayer,
     testAzanSequence,
     scheduleNextAzan,
+    stopAzan,
+    nextScheduledPrayer,
+    setCustomAzanFile: azanPlayer.setCustomAzanFile,
+    resetToDefaultAzan: azanPlayer.resetToDefaultAzan,
   };
 };
