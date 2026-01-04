@@ -2,11 +2,14 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Play, Music, Loader2, TrendingUp, Youtube, HardDrive, ExternalLink } from "lucide-react";
+import { Search, Play, Music, Loader2, TrendingUp, Youtube, HardDrive, ExternalLink, Plus } from "lucide-react";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { useUnifiedLibrary } from "@/hooks/useUnifiedLibrary";
+import { useToast } from "@/hooks/use-toast";
+import { SourceIcon } from "@/components/SourceIcon";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
@@ -39,6 +42,44 @@ export const MusicBrowser = ({ onOpenFullLibrary, localTracks = [] }: MusicBrows
   
   const spotify = useSpotify();
   const unifiedAudio = useUnifiedAudio();
+  const { importSpotifyTrack, importYouTubeTrack, tracks: libraryTracks } = useUnifiedLibrary();
+  const { toast } = useToast();
+
+  // Check if track is already in library
+  const isInLibrary = (track: Track) => {
+    if (track.source === 'spotify') {
+      return libraryTracks.some(t => t.externalId === track.uri);
+    } else if (track.source === 'youtube') {
+      return libraryTracks.some(t => t.externalId === track.videoId);
+    }
+    return false;
+  };
+
+  const addToLibrary = async (track: Track, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (track.source === 'spotify' && track.uri) {
+      // Parse the Spotify track data
+      const spotifyItem = spotifyResults.find(t => t.id === track.id);
+      if (spotifyItem) {
+        await importSpotifyTrack({
+          id: track.id,
+          name: track.name,
+          artists: [{ name: track.artist }],
+          album: { images: track.albumArt ? [{ url: track.albumArt }] : [] },
+          uri: track.uri,
+          duration_ms: 0, // We don't have this in search results
+        });
+      }
+    } else if (track.source === 'youtube' && track.videoId) {
+      await importYouTubeTrack({
+        id: track.videoId,
+        title: track.name,
+        thumbnail: track.albumArt || '',
+        channelTitle: track.artist,
+      });
+    }
+  };
 
   const searchSpotify = async (query: string): Promise<Track[]> => {
     if (!spotify.isConnected || !spotify.tokens?.accessToken) return [];
@@ -309,13 +350,26 @@ export const MusicBrowser = ({ onOpenFullLibrary, localTracks = [] }: MusicBrows
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium truncate">{track.name}</p>
-                    {getSourceBadge(track.source)}
+                    <SourceIcon source={track.source} size="sm" />
                   </div>
                   <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
                 </div>
-                <Button size="icon" variant="ghost" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Play className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {track.source !== 'local' && !isInLibrary(track) && (
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-8 w-8"
+                      onClick={(e) => addToLibrary(track, e)}
+                      title="Add to library"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button size="icon" variant="ghost" className="h-8 w-8">
+                    <Play className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

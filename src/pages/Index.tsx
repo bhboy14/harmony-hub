@@ -12,6 +12,7 @@ import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
 import { PlaybackBar } from "@/components/PlaybackBar";
+import { UnifiedLibrary } from "@/components/UnifiedLibrary";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary, Track } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler } from "@/hooks/useAzanScheduler";
@@ -19,7 +20,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Youtube, HardDrive, ChevronLeft, ChevronRight, User, ListMusic, Moon, Clock } from "lucide-react";
+import { Loader2, Youtube, HardDrive, ChevronLeft, ChevronRight, User, ListMusic, Moon, Clock, Library } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
@@ -180,8 +181,12 @@ const Index = () => {
 
             {activeTab === "library" && (
               <div className="p-6 h-full animate-fade-in overflow-y-auto custom-scrollbar pb-32">
-                <Tabs defaultValue="spotify" className="space-y-6">
+                <Tabs defaultValue="unified" className="space-y-6">
                   <TabsList className="bg-secondary">
+                    <TabsTrigger value="unified" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
+                      <Library className="h-4 w-4" />
+                      Unified Library
+                    </TabsTrigger>
                     <TabsTrigger value="spotify" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
                       <div className="text-[#1DB954]"><SpotifyIcon /></div>
                       Spotify
@@ -192,9 +197,12 @@ const Index = () => {
                     </TabsTrigger>
                     <TabsTrigger value="local" className="gap-2 data-[state=active]:bg-foreground data-[state=active]:text-background">
                       <HardDrive className="h-4 w-4" />
-                      Local
+                      Local Files
                     </TabsTrigger>
                   </TabsList>
+                  <TabsContent value="unified" className="h-[calc(100vh-14rem)]">
+                    <UnifiedLibrary />
+                  </TabsContent>
                   <TabsContent value="spotify" className="h-[calc(100vh-14rem)]">
                     <SpotifyPlayer />
                   </TabsContent>
