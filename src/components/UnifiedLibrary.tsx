@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { Play, Pause, Trash2, Music, Search, Filter, Loader2, ListPlus, ListEnd } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Play, Trash2, Music, Search, Loader2, ListPlus, ListEnd, User, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUnifiedLibrary, UnifiedTrack } from "@/hooks/useUnifiedLibrary";
+import { useMasterTracks, MasterTrack, Artist } from "@/hooks/useMasterTracks";
 import { LocalUploader } from "@/components/LocalUploader";
 import { SourceIcon } from "@/components/SourceIcon";
+import { ArtistProfile } from "@/components/ArtistProfile";
 import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useToast } from "@/hooks/use-toast";
@@ -24,8 +26,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MoreHorizontal } from "lucide-react";
 
 interface UnifiedLibraryProps {
@@ -33,30 +42,60 @@ interface UnifiedLibraryProps {
   onOpenYouTube?: () => void;
 }
 
+// Virtual scrolling constants
+const ITEM_HEIGHT = 64;
+const OVERSCAN_COUNT = 5;
+
 export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryProps) => {
-  const { tracks, isLoading, deleteTrack, loadTracks } = useUnifiedLibrary();
+  const { tracks, isLoading, deleteTrack, loadTracks, fetchMissingArtwork } = useUnifiedLibrary() as any;
+  const { 
+    masterTracks, 
+    isProcessing, 
+    fetchArtistProfile, 
+    filterMasterTracks 
+  } = useMasterTracks(tracks);
   const unifiedAudio = useUnifiedAudio();
   const spotify = useSpotify();
   const { toast } = useToast();
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<'all' | 'spotify' | 'youtube' | 'local' | 'soundcloud'>('all');
+  const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped');
+  const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
+  const [isLoadingArtist, setIsLoadingArtist] = useState(false);
+  
+  // Virtual scrolling state
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
 
-  // Filter tracks
-  const filteredTracks = tracks.filter(track => {
-    const matchesSearch = 
-      track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (track.artist?.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesSource = sourceFilter === 'all' || track.source === sourceFilter;
-    
-    return matchesSearch && matchesSource;
-  });
+  // Filter tracks based on view mode
+  const filteredData = viewMode === 'grouped' 
+    ? filterMasterTracks(searchQuery, sourceFilter)
+    : tracks.filter((track: UnifiedTrack) => {
+        const matchesSearch = 
+          track.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (track.artist?.toLowerCase().includes(searchQuery.toLowerCase()));
+        const matchesSource = sourceFilter === 'all' || track.source === sourceFilter;
+        return matchesSearch && matchesSource;
+      });
 
-  // Group by source for stats
-  const spotifyTracks = tracks.filter(t => t.source === 'spotify');
-  const youtubeTracks = tracks.filter(t => t.source === 'youtube');
-  const localTracks = tracks.filter(t => t.source === 'local');
-  const soundcloudTracks = tracks.filter(t => t.source === 'soundcloud');
+  // Calculate source counts
+  const spotifyTracks = tracks.filter((t: UnifiedTrack) => t.source === 'spotify');
+  const youtubeTracks = tracks.filter((t: UnifiedTrack) => t.source === 'youtube');
+  const localTracks = tracks.filter((t: UnifiedTrack) => t.source === 'local');
+  const soundcloudTracks = tracks.filter((t: UnifiedTrack) => t.source === 'soundcloud');
+
+  // Virtual scrolling calculations
+  const visibleCount = Math.ceil(600 / ITEM_HEIGHT);
+  const startIndex = Math.max(0, Math.floor(scrollTop / ITEM_HEIGHT) - OVERSCAN_COUNT);
+  const endIndex = Math.min(filteredData.length, startIndex + visibleCount + OVERSCAN_COUNT * 2);
+  const visibleItems = filteredData.slice(startIndex, endIndex);
+  const totalHeight = filteredData.length * ITEM_HEIGHT;
+  const offsetY = startIndex * ITEM_HEIGHT;
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
 
   const playTrack = (track: UnifiedTrack) => {
     if (track.source === 'spotify' && track.externalId) {
@@ -64,7 +103,6 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
     } else if (track.source === 'youtube' && track.externalId) {
       unifiedAudio.playYouTubeVideo(track.externalId, track.title);
     } else if (track.source === 'local' && track.localUrl) {
-      // Format duration from ms to M:SS
       const durationMs = track.durationMs || 0;
       const minutes = Math.floor(durationMs / 60000);
       const seconds = Math.floor((durationMs % 60000) / 1000);
@@ -78,6 +116,18 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
         url: track.localUrl,
         albumArt: track.albumArt || undefined,
       });
+    }
+  };
+
+  const playMasterTrack = (master: MasterTrack) => {
+    // Prefer Spotify, then local, then YouTube
+    const spotifySource = master.sources.find(s => s.source === 'spotify');
+    const localSource = master.sources.find(s => s.source === 'local');
+    const youtubeSource = master.sources.find(s => s.source === 'youtube');
+    
+    const preferredTrack = spotifySource || localSource || youtubeSource || master.sources[0];
+    if (preferredTrack) {
+      playTrack(preferredTrack);
     }
   };
 
@@ -107,17 +157,231 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
 
     if (playNext) {
       unifiedAudio.playNext(queueTrack);
-      toast({
-        title: "Playing next",
-        description: `"${track.title}" will play next`,
-      });
+      toast({ title: "Playing next", description: `"${track.title}" will play next` });
     } else {
       unifiedAudio.addToQueue(queueTrack);
-      toast({
-        title: "Added to queue",
-        description: `"${track.title}" added to queue`,
-      });
+      toast({ title: "Added to queue", description: `"${track.title}" added to queue` });
     }
+  };
+
+  const handleArtistClick = async (artistName: string) => {
+    if (!artistName) return;
+    
+    setIsLoadingArtist(true);
+    const artist = await fetchArtistProfile(artistName);
+    setSelectedArtist(artist);
+    setIsLoadingArtist(false);
+  };
+
+  // Render a flat track row
+  const renderTrackRow = (track: UnifiedTrack, index: number) => (
+    <div
+      key={track.id}
+      className={`group flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/80 transition-colors cursor-pointer ${
+        isCurrentTrack(track) ? 'bg-secondary' : ''
+      }`}
+      style={{ height: ITEM_HEIGHT }}
+      onClick={() => playTrack(track)}
+    >
+      <div className="w-8 text-center">
+        <span className="group-hover:hidden text-sm text-muted-foreground">
+          {isCurrentTrack(track) && unifiedAudio.isPlaying ? (
+            <span className="text-primary">▶</span>
+          ) : (
+            startIndex + index + 1
+          )}
+        </span>
+        <Play className="h-4 w-4 hidden group-hover:block mx-auto text-foreground" />
+      </div>
+
+      <div className="w-10 h-10 rounded overflow-hidden bg-secondary flex-shrink-0">
+        {track.albumArt ? (
+          <img src={track.albumArt} alt={track.title} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Music className="h-4 w-4 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className={`font-medium truncate ${isCurrentTrack(track) ? 'text-primary' : 'text-foreground'}`}>
+            {track.title}
+          </p>
+          <SourceIcon source={track.source} size="sm" />
+        </div>
+        <p 
+          className="text-sm text-muted-foreground truncate hover:text-primary hover:underline cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (track.artist) handleArtistClick(track.artist);
+          }}
+        >
+          {track.artist || 'Unknown Artist'}
+        </p>
+      </div>
+
+      <span className="text-sm text-muted-foreground">{formatDuration(track.durationMs)}</span>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => addTrackToQueue(track, true)}>
+            <ListPlus className="h-4 w-4 mr-2" />Play Next
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => addTrackToQueue(track, false)}>
+            <ListEnd className="h-4 w-4 mr-2" />Add to Queue
+          </DropdownMenuItem>
+          {track.artist && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleArtistClick(track.artist!)}>
+                <User className="h-4 w-4 mr-2" />View Artist
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive" onClick={(e) => e.stopPropagation()}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from library?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove "{track.title}" from your unified library.
+              {track.source === 'local' && ' The file will also be deleted from storage.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTrack(track.id)}>Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+
+  // Render a master track row (grouped view)
+  const renderMasterTrackRow = (master: MasterTrack, index: number) => {
+    const primaryTrack = master.sources[0];
+    const isPlaying = master.sources.some(s => isCurrentTrack(s));
+
+    return (
+      <div
+        key={master.id}
+        className={`group flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/80 transition-colors cursor-pointer ${
+          isPlaying ? 'bg-secondary' : ''
+        }`}
+        style={{ height: ITEM_HEIGHT }}
+        onClick={() => playMasterTrack(master)}
+      >
+        <div className="w-8 text-center">
+          <span className="group-hover:hidden text-sm text-muted-foreground">
+            {isPlaying && unifiedAudio.isPlaying ? (
+              <span className="text-primary">▶</span>
+            ) : (
+              startIndex + index + 1
+            )}
+          </span>
+          <Play className="h-4 w-4 hidden group-hover:block mx-auto text-foreground" />
+        </div>
+
+        <div className="w-10 h-10 rounded overflow-hidden bg-secondary flex-shrink-0 relative">
+          {master.primaryAlbumArt ? (
+            <img src={master.primaryAlbumArt} alt={master.canonicalTitle} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Music className="h-4 w-4 text-muted-foreground" />
+            </div>
+          )}
+          {/* Multi-source indicator */}
+          {master.sources.length > 1 && (
+            <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-xs w-4 h-4 rounded-full flex items-center justify-center font-medium">
+              {master.sources.length}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className={`font-medium truncate ${isPlaying ? 'text-primary' : 'text-foreground'}`}>
+              {master.canonicalTitle}
+            </p>
+            {/* Show all source icons */}
+            <TooltipProvider>
+              <div className="flex items-center -space-x-1">
+                {master.sources.map((source, idx) => (
+                  <Tooltip key={idx}>
+                    <TooltipTrigger asChild>
+                      <div className="relative">
+                        <SourceIcon source={source.source} size="sm" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      {source.source.charAt(0).toUpperCase() + source.source.slice(1)}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </TooltipProvider>
+          </div>
+          <p 
+            className="text-sm text-muted-foreground truncate hover:text-primary hover:underline cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (master.canonicalArtist) handleArtistClick(master.canonicalArtist.split(',')[0].trim());
+            }}
+          >
+            {master.canonicalArtist || 'Unknown Artist'}
+          </p>
+        </div>
+
+        <span className="text-sm text-muted-foreground">
+          {formatDuration(primaryTrack.durationMs)}
+        </span>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {master.sources.map((source, idx) => (
+              <DropdownMenuItem key={idx} onClick={() => playTrack(source)}>
+                <SourceIcon source={source.source} size="sm" className="mr-2" />
+                Play from {source.source.charAt(0).toUpperCase() + source.source.slice(1)}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => addTrackToQueue(primaryTrack, true)}>
+              <ListPlus className="h-4 w-4 mr-2" />Play Next
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => addTrackToQueue(primaryTrack, false)}>
+              <ListEnd className="h-4 w-4 mr-2" />Add to Queue
+            </DropdownMenuItem>
+            {master.canonicalArtist && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleArtistClick(master.canonicalArtist!.split(',')[0].trim())}>
+                  <User className="h-4 w-4 mr-2" />View Artist
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
   };
 
   return (
@@ -127,80 +391,67 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
         <div>
           <h2 className="text-2xl font-bold text-foreground">Unified Library</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {tracks.length} tracks from all sources
+            {viewMode === 'grouped' 
+              ? `${masterTracks.length} unique songs from ${tracks.length} sources`
+              : `${tracks.length} tracks from all sources`
+            }
           </p>
         </div>
-        <Button variant="outline" onClick={loadTracks} disabled={isLoading}>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant={viewMode === 'grouped' ? 'default' : 'outline'} 
+                  size="icon"
+                  onClick={() => setViewMode(viewMode === 'grouped' ? 'flat' : 'grouped')}
+                >
+                  <Layers className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {viewMode === 'grouped' ? 'Switch to flat view' : 'Switch to grouped view'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Button variant="outline" onClick={loadTracks} disabled={isLoading || isProcessing}>
+            {(isLoading || isProcessing) ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
+          </Button>
+        </div>
       </div>
 
       {/* Source Stats */}
       <div className="grid grid-cols-4 gap-4">
-        <button
-          className={`p-4 rounded-lg border transition-all ${
-            sourceFilter === 'spotify' 
-              ? 'border-[#1DB954] bg-[#1DB954]/10' 
-              : 'border-border bg-secondary/50 hover:bg-secondary'
-          }`}
-          onClick={() => setSourceFilter(sourceFilter === 'spotify' ? 'all' : 'spotify')}
-        >
-          <div className="flex items-center gap-2">
-            <SourceIcon source="spotify" showTooltip={false} />
-            <span className="font-medium text-foreground">Spotify</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground mt-2">{spotifyTracks.length}</p>
-        </button>
-
-        <button
-          className={`p-4 rounded-lg border transition-all ${
-            sourceFilter === 'youtube' 
-              ? 'border-[#FF0000] bg-[#FF0000]/10' 
-              : 'border-border bg-secondary/50 hover:bg-secondary'
-          }`}
-          onClick={() => setSourceFilter(sourceFilter === 'youtube' ? 'all' : 'youtube')}
-        >
-          <div className="flex items-center gap-2">
-            <SourceIcon source="youtube" showTooltip={false} />
-            <span className="font-medium text-foreground">YouTube</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground mt-2">{youtubeTracks.length}</p>
-        </button>
-
-        <button
-          className={`p-4 rounded-lg border transition-all ${
-            sourceFilter === 'soundcloud' 
-              ? 'border-[#FF5500] bg-[#FF5500]/10' 
-              : 'border-border bg-secondary/50 hover:bg-secondary'
-          }`}
-          onClick={() => setSourceFilter(sourceFilter === 'soundcloud' ? 'all' : 'soundcloud')}
-        >
-          <div className="flex items-center gap-2">
-            <SourceIcon source="soundcloud" showTooltip={false} />
-            <span className="font-medium text-foreground">SoundCloud</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground mt-2">{soundcloudTracks.length}</p>
-        </button>
-
-        <button
-          className={`p-4 rounded-lg border transition-all ${
-            sourceFilter === 'local' 
-              ? 'border-primary bg-primary/10' 
-              : 'border-border bg-secondary/50 hover:bg-secondary'
-          }`}
-          onClick={() => setSourceFilter(sourceFilter === 'local' ? 'all' : 'local')}
-        >
-          <div className="flex items-center gap-2">
-            <SourceIcon source="local" showTooltip={false} />
-            <span className="font-medium text-foreground">Local</span>
-          </div>
-          <p className="text-2xl font-bold text-foreground mt-2">{localTracks.length}</p>
-        </button>
+        {[
+          { key: 'spotify' as const, label: 'Spotify', count: spotifyTracks.length, color: '#1DB954' },
+          { key: 'youtube' as const, label: 'YouTube', count: youtubeTracks.length, color: '#FF0000' },
+          { key: 'soundcloud' as const, label: 'SoundCloud', count: soundcloudTracks.length, color: '#FF5500' },
+          { key: 'local' as const, label: 'Local', count: localTracks.length, color: 'hsl(var(--primary))' },
+        ].map(({ key, label, count, color }) => (
+          <button
+            key={key}
+            className={`p-4 rounded-lg border transition-all ${
+              sourceFilter === key 
+                ? `border-[${color}] bg-[${color}]/10` 
+                : 'border-border bg-secondary/50 hover:bg-secondary'
+            }`}
+            style={sourceFilter === key ? { borderColor: color, backgroundColor: `${color}10` } : {}}
+            onClick={() => setSourceFilter(sourceFilter === key ? 'all' : key)}
+          >
+            <div className="flex items-center gap-2">
+              <SourceIcon source={key} showTooltip={false} />
+              <span className="font-medium text-foreground">{label}</span>
+            </div>
+            <p className="text-2xl font-bold text-foreground mt-2">{count}</p>
+          </button>
+        ))}
       </div>
 
       <Tabs defaultValue="tracks" className="space-y-4">
         <TabsList className="bg-secondary">
-          <TabsTrigger value="tracks">All Tracks</TabsTrigger>
+          <TabsTrigger value="tracks">
+            {viewMode === 'grouped' ? 'Master Tracks' : 'All Tracks'}
+          </TabsTrigger>
           <TabsTrigger value="upload">Upload Local</TabsTrigger>
         </TabsList>
 
@@ -216,12 +467,15 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
             />
           </div>
 
-          {/* Track List */}
-          {isLoading ? (
+          {/* Track List with Virtual Scrolling */}
+          {(isLoading || isProcessing) ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">
+                {isProcessing ? 'Grouping tracks...' : 'Loading...'}
+              </span>
             </div>
-          ) : filteredTracks.length === 0 ? (
+          ) : filteredData.length === 0 ? (
             <div className="text-center py-12">
               <Music className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
@@ -231,108 +485,19 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
               </p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {filteredTracks.map((track, index) => (
-                <div
-                  key={track.id}
-                  className={`group flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/80 transition-colors cursor-pointer ${
-                    isCurrentTrack(track) ? 'bg-secondary' : ''
-                  }`}
-                  onClick={() => playTrack(track)}
-                >
-                  {/* Index / Play Button */}
-                  <div className="w-8 text-center">
-                    <span className="group-hover:hidden text-sm text-muted-foreground">
-                      {isCurrentTrack(track) && unifiedAudio.isPlaying ? (
-                        <span className="text-primary">▶</span>
-                      ) : (
-                        index + 1
-                      )}
-                    </span>
-                    <Play className="h-4 w-4 hidden group-hover:block mx-auto text-foreground" />
-                  </div>
-
-                  {/* Album Art */}
-                  <div className="w-10 h-10 rounded overflow-hidden bg-secondary flex-shrink-0">
-                    {track.albumArt ? (
-                      <img src={track.albumArt} alt={track.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Music className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Track Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className={`font-medium truncate ${isCurrentTrack(track) ? 'text-primary' : 'text-foreground'}`}>
-                        {track.title}
-                      </p>
-                      <SourceIcon source={track.source} size="sm" />
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">{track.artist || 'Unknown Artist'}</p>
-                  </div>
-
-                  {/* Duration */}
-                  <span className="text-sm text-muted-foreground">
-                    {formatDuration(track.durationMs)}
-                  </span>
-
-                  {/* Queue Actions */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => addTrackToQueue(track, true)}>
-                        <ListPlus className="h-4 w-4 mr-2" />
-                        Play Next
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addTrackToQueue(track, false)}>
-                        <ListEnd className="h-4 w-4 mr-2" />
-                        Add to Queue
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-
-                  {/* Delete Button */}
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remove from library?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This will remove "{track.title}" from your unified library.
-                          {track.source === 'local' && ' The file will also be deleted from storage.'}
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteTrack(track.id)}>
-                          Remove
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+            <div 
+              ref={scrollContainerRef}
+              className="h-[600px] overflow-auto"
+              onScroll={handleScroll}
+            >
+              <div style={{ height: totalHeight, position: 'relative' }}>
+                <div style={{ transform: `translateY(${offsetY}px)` }}>
+                  {viewMode === 'grouped' 
+                    ? visibleItems.map((item: MasterTrack, idx: number) => renderMasterTrackRow(item, idx))
+                    : visibleItems.map((item: UnifiedTrack, idx: number) => renderTrackRow(item, idx))
+                  }
                 </div>
-              ))}
+              </div>
             </div>
           )}
         </TabsContent>
@@ -341,6 +506,15 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
           <LocalUploader />
         </TabsContent>
       </Tabs>
+
+      {/* Artist Profile Panel */}
+      {(selectedArtist || isLoadingArtist) && (
+        <ArtistProfile 
+          artist={selectedArtist}
+          isLoading={isLoadingArtist}
+          onClose={() => setSelectedArtist(null)}
+        />
+      )}
     </div>
   );
 };
