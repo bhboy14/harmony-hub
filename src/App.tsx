@@ -23,8 +23,8 @@ const App = () => (
       <AuthProvider>
         <SpotifyProvider>
           <SoundCloudProvider>
-            <PAProvider>
-              <UnifiedAudioProvider>
+            <UnifiedAudioProvider>
+              <PAProvider>
                 <Toaster />
                 <Sonner />
                 <BrowserRouter>
@@ -38,8 +38,8 @@ const App = () => (
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </BrowserRouter>
-              </UnifiedAudioProvider>
-            </PAProvider>
+              </PAProvider>
+            </UnifiedAudioProvider>
           </SoundCloudProvider>
         </SpotifyProvider>
       </AuthProvider>

@@ -16,7 +16,7 @@ import {
   Music,
   Waves
 } from "lucide-react";
-import { useSpotify } from "@/contexts/SpotifyContext";
+import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface AudioDevice {
@@ -39,7 +39,7 @@ export const PASystem = () => {
   const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [autoDuck, setAutoDuck] = useState(true);
   
-  const spotify = useSpotify();
+  const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
   
   // Audio context refs
@@ -48,7 +48,7 @@ export const PASystem = () => {
   const gainNodeRef = useRef<GainNode | null>(null);
   const delayNodeRef = useRef<DelayNode | null>(null);
   const feedbackNodeRef = useRef<GainNode | null>(null);
-  const preBroadcastVolumeRef = useRef<number>(100);
+  const preBroadcastStateRef = useRef<{ previousVolume: number; wasPlaying: boolean; activeSource: AudioSource } | null>(null);
 
   const [presets] = useState([
     { id: "1", name: "Meeting Starting", text: "Attention everyone. The meeting will begin in 5 minutes in the main conference room." },
@@ -164,16 +164,20 @@ export const PASystem = () => {
         delayNode.connect(audioContext.destination);
       }
       
-      // Duck music if auto-duck is enabled
-      if (autoDuck && spotify.isConnected && spotify.playbackState?.isPlaying) {
-        preBroadcastVolumeRef.current = spotify.playbackState.volume || 100;
-        await spotify.fadeVolume(musicDuckLevel, fadeOutDuration * 1000);
+      // Duck ALL music sources if auto-duck is enabled
+      if (autoDuck && (unifiedAudio.isPlaying || unifiedAudio.activeSource)) {
+        try {
+          const state = await unifiedAudio.fadeAllAndPause(musicDuckLevel, fadeOutDuration * 1000);
+          preBroadcastStateRef.current = state;
+        } catch (err) {
+          console.warn('Could not duck audio:', err);
+        }
       }
       
       setIsLive(true);
       toast({
         title: "Broadcast Started",
-        description: "You are now live. Speak into your microphone.",
+        description: "You are now live. All music has been paused.",
       });
     } catch (err) {
       console.error("Error starting broadcast:", err);
@@ -183,7 +187,7 @@ export const PASystem = () => {
         variant: "destructive"
       });
     }
-  }, [selectedMic, micVolume, delayAmount, echoAmount, autoDuck, spotify, musicDuckLevel, fadeOutDuration, toast]);
+  }, [selectedMic, micVolume, delayAmount, echoAmount, autoDuck, unifiedAudio, musicDuckLevel, fadeOutDuration, toast]);
 
   const stopBroadcast = useCallback(async () => {
     // Stop media stream
@@ -198,17 +202,22 @@ export const PASystem = () => {
       audioContextRef.current = null;
     }
     
-    // Restore music volume
-    if (autoDuck && spotify.isConnected) {
-      await spotify.fadeVolume(preBroadcastVolumeRef.current, fadeInDuration * 1000);
+    // Restore ALL music sources
+    if (autoDuck && preBroadcastStateRef.current) {
+      try {
+        await unifiedAudio.resumeAll(preBroadcastStateRef.current, fadeInDuration * 1000);
+        preBroadcastStateRef.current = null;
+      } catch (err) {
+        console.warn('Could not restore audio:', err);
+      }
     }
     
     setIsLive(false);
     toast({
       title: "Broadcast Ended",
-      description: "You are no longer live.",
+      description: "Music playback has been resumed.",
     });
-  }, [autoDuck, spotify, fadeInDuration, toast]);
+  }, [autoDuck, unifiedAudio, fadeInDuration, toast]);
 
   // Update audio nodes when settings change during broadcast
   useEffect(() => {
