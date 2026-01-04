@@ -56,6 +56,7 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
   const spotifyTracks = tracks.filter(t => t.source === 'spotify');
   const youtubeTracks = tracks.filter(t => t.source === 'youtube');
   const localTracks = tracks.filter(t => t.source === 'local');
+  const soundcloudTracks = tracks.filter(t => t.source === 'soundcloud');
 
   const playTrack = (track: UnifiedTrack) => {
     if (track.source === 'spotify' && track.externalId) {
@@ -135,7 +136,7 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
       </div>
 
       {/* Source Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <button
           className={`p-4 rounded-lg border transition-all ${
             sourceFilter === 'spotify' 
@@ -164,6 +165,21 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
             <span className="font-medium text-foreground">YouTube</span>
           </div>
           <p className="text-2xl font-bold text-foreground mt-2">{youtubeTracks.length}</p>
+        </button>
+
+        <button
+          className={`p-4 rounded-lg border transition-all ${
+            sourceFilter === 'soundcloud' 
+              ? 'border-[#FF5500] bg-[#FF5500]/10' 
+              : 'border-border bg-secondary/50 hover:bg-secondary'
+          }`}
+          onClick={() => setSourceFilter(sourceFilter === 'soundcloud' ? 'all' : 'soundcloud')}
+        >
+          <div className="flex items-center gap-2">
+            <SourceIcon source="soundcloud" showTooltip={false} />
+            <span className="font-medium text-foreground">SoundCloud</span>
+          </div>
+          <p className="text-2xl font-bold text-foreground mt-2">{soundcloudTracks.length}</p>
         </button>
 
         <button

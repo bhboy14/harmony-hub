@@ -8,3 +8,12 @@ verify_jwt = false
 
 [functions.youtube-search]
 verify_jwt = true
+
+[functions.soundcloud-auth]
+verify_jwt = false
+
+[functions.soundcloud-player]
+verify_jwt = false
+
+[functions.soundcloud-proxy]
+verify_jwt = true
