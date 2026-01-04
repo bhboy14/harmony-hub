@@ -1,6 +1,7 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { usePA } from "@/contexts/PAContext";
+import { useCasting } from "@/contexts/CastingContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -39,10 +40,13 @@ import {
   Youtube,
   Maximize2,
   ListMusic,
-  Airplay
+  Airplay,
+  Cast,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 
 const SpotifyIcon = () => (
@@ -75,6 +79,7 @@ export const PlaybackBar = () => {
   const unified = useUnifiedAudio();
   const spotify = useSpotify();
   const { isLive, audioLevel, toggleBroadcast } = usePA();
+  const casting = useCasting();
   
   const [queueOpen, setQueueOpen] = useState(false);
   
@@ -399,6 +404,72 @@ export const PlaybackBar = () => {
                     </DropdownMenuItem>
                   );
                 })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Cast to External Devices */}
+          {casting.isCastingSupported && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className={`h-8 w-8 ${casting.isCasting ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {casting.isCasting ? (
+                        <Wifi className="h-4 w-4" />
+                      ) : (
+                        <Cast className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {casting.isCasting ? `Casting to ${casting.currentDevice?.name}` : 'Cast to device'}
+                </TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end" className="w-56">
+                {casting.isCasting && casting.currentDevice ? (
+                  <>
+                    <div className="px-3 py-2 flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span className="font-medium">{casting.currentDevice.name}</span>
+                    </div>
+                    <DropdownMenuItem 
+                      onClick={casting.stopCasting}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <WifiOff className="h-4 w-4 mr-2" />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    {/* Chromecast - Chrome only */}
+                    {/chrome/i.test(navigator.userAgent) && !/edge/i.test(navigator.userAgent) && (
+                      <DropdownMenuItem onClick={casting.startChromecast}>
+                        <Cast className="h-4 w-4 mr-2" />
+                        <div className="flex flex-col">
+                          <span>Chromecast</span>
+                          <span className="text-xs text-muted-foreground">Cast to nearby devices</span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                    {/* AirPlay - Safari only */}
+                    {/^((?!chrome|android).)*safari/i.test(navigator.userAgent) && (
+                      <DropdownMenuItem onClick={() => casting.startAirPlay()}>
+                        <Airplay className="h-4 w-4 mr-2" />
+                        <div className="flex flex-col">
+                          <span>AirPlay</span>
+                          <span className="text-xs text-muted-foreground">Stream to Apple devices</span>
+                        </div>
+                      </DropdownMenuItem>
+                    )}
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
