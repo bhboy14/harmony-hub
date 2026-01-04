@@ -52,6 +52,11 @@ interface UnifiedAudioContextType {
   // Local audio ref
   localAudioRef: React.RefObject<HTMLAudioElement | null>;
   
+  // PA/Broadcast ducking functions
+  fadeAllAndPause: (targetVolume: number, durationMs: number) => Promise<{ previousVolume: number; wasPlaying: boolean; activeSource: AudioSource }>;
+  resumeAll: (previousState: { previousVolume: number; wasPlaying: boolean; activeSource: AudioSource }, durationMs: number) => Promise<void>;
+  stopAllAudio: () => Promise<void>;
+  
   // Queue management
   queue: QueueTrack[];
   queueHistory: QueueTrack[];
@@ -317,6 +322,176 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     if (except !== 'spotify' && spotify.playbackState?.isPlaying) {
       await spotify.pause();
     }
+  }, [spotify]);
+
+  // Fade all audio sources and pause - for PA/Broadcast mode
+  const fadeAllAndPause = useCallback(async (targetVolume: number, durationMs: number): Promise<{ previousVolume: number; wasPlaying: boolean; activeSource: AudioSource }> => {
+    const previousVolume = volume;
+    const wasPlaying = isPlaying || spotify.playbackState?.isPlaying || false;
+    const currentSource = activeSource;
+    
+    const steps = 20;
+    const stepDuration = durationMs / steps;
+    const volumeStep = (targetVolume - previousVolume) / steps;
+    
+    // Gradual fade
+    for (let i = 1; i <= steps; i++) {
+      const newVolume = Math.round(previousVolume + volumeStep * i);
+      const clampedVolume = Math.max(0, Math.min(100, newVolume));
+      
+      // Local audio
+      if (localAudioRef.current) {
+        localAudioRef.current.volume = clampedVolume / 100;
+      }
+      // SoundCloud audio
+      if (soundcloudAudioRef.current) {
+        soundcloudAudioRef.current.volume = clampedVolume / 100;
+      }
+      // YouTube
+      if (youtubePlayerRef.current?.setVolume) {
+        youtubePlayerRef.current.setVolume(clampedVolume);
+      }
+      // Spotify - use their fade if available
+      if (spotify.isConnected && spotify.playbackState?.isPlaying) {
+        try {
+          await spotify.setVolume(clampedVolume);
+        } catch (e) {
+          console.warn('Spotify volume adjustment failed:', e);
+        }
+      }
+      
+      await new Promise(r => setTimeout(r, stepDuration));
+    }
+    
+    // Pause all sources after fade
+    if (localAudioRef.current && !localAudioRef.current.paused) {
+      localAudioRef.current.pause();
+    }
+    if (soundcloudAudioRef.current && !soundcloudAudioRef.current.paused) {
+      soundcloudAudioRef.current.pause();
+    }
+    if (youtubePlayerRef.current?.pauseVideo) {
+      try {
+        youtubePlayerRef.current.pauseVideo();
+      } catch (e) {
+        // YouTube player might not be ready
+      }
+    }
+    if (spotify.playbackState?.isPlaying) {
+      try {
+        await spotify.pause();
+      } catch (e) {
+        console.warn('Spotify pause failed:', e);
+      }
+    }
+    
+    setIsPlaying(false);
+    
+    return { previousVolume, wasPlaying, activeSource: currentSource };
+  }, [volume, isPlaying, activeSource, spotify]);
+
+  // Resume all audio after PA broadcast ends
+  const resumeAll = useCallback(async (
+    previousState: { previousVolume: number; wasPlaying: boolean; activeSource: AudioSource },
+    durationMs: number
+  ) => {
+    const { previousVolume: targetVolume, wasPlaying, activeSource: prevSource } = previousState;
+    
+    // Only resume if was playing before
+    if (!wasPlaying) return;
+    
+    // Resume playback on the previous source
+    switch (prevSource) {
+      case 'local':
+        if (localAudioRef.current) {
+          localAudioRef.current.volume = 0;
+          await localAudioRef.current.play();
+        }
+        break;
+      case 'soundcloud':
+        if (soundcloudAudioRef.current) {
+          soundcloudAudioRef.current.volume = 0;
+          await soundcloudAudioRef.current.play();
+        }
+        break;
+      case 'youtube':
+        if (youtubePlayerRef.current?.playVideo) {
+          youtubePlayerRef.current.setVolume(0);
+          youtubePlayerRef.current.playVideo();
+        }
+        break;
+      case 'spotify':
+        if (spotify.isConnected) {
+          try {
+            await spotify.setVolume(0);
+            await spotify.play();
+          } catch (e) {
+            console.warn('Spotify resume failed:', e);
+          }
+        }
+        break;
+    }
+    
+    setIsPlaying(true);
+    
+    // Gradual fade in
+    const steps = 20;
+    const stepDuration = durationMs / steps;
+    const volumeStep = targetVolume / steps;
+    
+    for (let i = 1; i <= steps; i++) {
+      const newVolume = Math.round(volumeStep * i);
+      const clampedVolume = Math.max(0, Math.min(100, newVolume));
+      
+      if (localAudioRef.current) {
+        localAudioRef.current.volume = clampedVolume / 100;
+      }
+      if (soundcloudAudioRef.current) {
+        soundcloudAudioRef.current.volume = clampedVolume / 100;
+      }
+      if (youtubePlayerRef.current?.setVolume) {
+        youtubePlayerRef.current.setVolume(clampedVolume);
+      }
+      if (spotify.isConnected) {
+        try {
+          await spotify.setVolume(clampedVolume);
+        } catch (e) {
+          // Ignore volume errors during fade
+        }
+      }
+      
+      await new Promise(r => setTimeout(r, stepDuration));
+    }
+    
+    setVolumeState(targetVolume);
+  }, [spotify]);
+
+  // Stop all audio immediately (for emergencies)
+  const stopAllAudio = useCallback(async () => {
+    if (localAudioRef.current) {
+      localAudioRef.current.pause();
+      localAudioRef.current.currentTime = 0;
+    }
+    if (soundcloudAudioRef.current) {
+      soundcloudAudioRef.current.pause();
+      soundcloudAudioRef.current.currentTime = 0;
+    }
+    if (youtubePlayerRef.current?.stopVideo) {
+      try {
+        youtubePlayerRef.current.stopVideo();
+      } catch (e) {
+        // YouTube player might not be ready
+      }
+    }
+    if (spotify.isConnected && spotify.playbackState?.isPlaying) {
+      try {
+        await spotify.pause();
+      } catch (e) {
+        console.warn('Spotify stop failed:', e);
+      }
+    }
+    setIsPlaying(false);
+    setActiveSourceState(null);
   }, [spotify]);
 
   const setActiveSource = useCallback((source: AudioSource) => {
@@ -847,6 +1022,10 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
         registerYouTubePlayer,
         unregisterYouTubePlayer,
         localAudioRef,
+        // PA/Broadcast ducking
+        fadeAllAndPause,
+        resumeAll,
+        stopAllAudio,
         // Queue management
         queue: queueManager.queue,
         queueHistory: queueManager.history,

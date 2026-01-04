@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
-import { useSpotify } from "@/contexts/SpotifyContext";
+import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface PAContextType {
@@ -23,7 +23,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   const [fadeOutDuration] = useState(2);
   const [autoDuck] = useState(true);
   
-  const spotify = useSpotify();
+  const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
   
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -31,7 +31,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   const gainNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const preBroadcastVolumeRef = useRef<number>(100);
+  const preBroadcastStateRef = useRef<{ previousVolume: number; wasPlaying: boolean; activeSource: AudioSource } | null>(null);
 
   // Update gain when volume changes
   useEffect(() => {
@@ -102,20 +102,20 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       analyser.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
-      // Duck music if connected and playing
-      if (autoDuck && spotify.isConnected && spotify.playbackState?.isPlaying) {
-        preBroadcastVolumeRef.current = spotify.playbackState.volume || 100;
+      // Duck ALL audio sources (Spotify, YouTube, Local, SoundCloud)
+      if (autoDuck && (unifiedAudio.isPlaying || unifiedAudio.activeSource)) {
         try {
-          await spotify.fadeVolume(musicDuckLevel, fadeOutDuration * 1000);
+          const state = await unifiedAudio.fadeAllAndPause(musicDuckLevel, fadeOutDuration * 1000);
+          preBroadcastStateRef.current = state;
         } catch (err) {
-          console.warn('Could not duck music volume:', err);
+          console.warn('Could not duck audio:', err);
         }
       }
       
       setIsLive(true);
       toast({
         title: "Broadcast Started",
-        description: "You are now live. Speak into your microphone.",
+        description: "You are now live. All music has been paused.",
       });
     } catch (err) {
       console.error("Error starting broadcast:", err);
@@ -125,7 +125,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive"
       });
     }
-  }, [micVolume, autoDuck, spotify, musicDuckLevel, fadeOutDuration, toast]);
+  }, [micVolume, autoDuck, unifiedAudio, musicDuckLevel, fadeOutDuration, toast]);
 
   const stopBroadcast = useCallback(async () => {
     // Cancel animation frame
@@ -147,21 +147,22 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
     analyserRef.current = null;
     setAudioLevel(0);
     
-    // Restore music volume - wrap in try/catch since device may not be active
-    if (autoDuck && spotify.isConnected) {
+    // Restore ALL audio sources
+    if (autoDuck && preBroadcastStateRef.current) {
       try {
-        await spotify.fadeVolume(preBroadcastVolumeRef.current, fadeInDuration * 1000);
+        await unifiedAudio.resumeAll(preBroadcastStateRef.current, fadeInDuration * 1000);
+        preBroadcastStateRef.current = null;
       } catch (err) {
-        console.warn('Could not restore music volume:', err);
+        console.warn('Could not restore audio:', err);
       }
     }
     
     setIsLive(false);
     toast({
       title: "Broadcast Ended",
-      description: "You are no longer live.",
+      description: "Music playback has been resumed.",
     });
-  }, [autoDuck, spotify, fadeInDuration, toast]);
+  }, [autoDuck, unifiedAudio, fadeInDuration, toast]);
 
   const toggleBroadcast = useCallback(async () => {
     if (isLive) {
