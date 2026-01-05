@@ -32,23 +32,24 @@ serve(async (req) => {
     // 1. Verify User is logged into Supabase (optional, but good practice)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseClient = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized Supabase User" }), { 
-        status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      return new Response(JSON.stringify({ error: "Unauthorized Supabase User" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -97,4 +98,33 @@ serve(async (req) => {
 
       case "get_stream":
         console.log("Getting stream");
-const response = await fetch(`https://api.soundcloud.com/resolve?url=${trackUrl}&client_id=${clientId}`);
+        // Extract trackUrl from the request params
+        const { trackUrl } = params;
+
+        if (!trackUrl) {
+          throw new Error("trackUrl parameter is required for get_stream");
+        }
+
+        // Use the global SC_CLIENT_ID defined at the top
+        response = await fetch(`https://api.soundcloud.com/resolve?url=${trackUrl}&client_id=${SC_CLIENT_ID}`, {
+          headers,
+        });
+        data = await safeParseResponse(response);
+        break;
+
+      default:
+        throw new Error(`Unknown action: ${action}`);
+    }
+
+    // --- RETURN SUCCESS RESPONSE ---
+    return new Response(JSON.stringify(data), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    // --- ERROR HANDLING ---
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
