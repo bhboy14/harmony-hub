@@ -9,6 +9,7 @@ import { useRecentlyPlayed } from "@/hooks/useRecentlyPlayed";
 import { RecentlyPlayed } from "@/components/RecentlyPlayed";
 import { SourceIcon } from "@/components/SourceIcon";
 import { PopularSongs } from "@/components/PopularSongs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
