@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Play, Library, History } from "lucide-react";
+import { Play, Library, History, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { RecentlyPlayed } from "@/components/RecentlyPlayed";
 import { SourceIcon } from "@/components/SourceIcon";
 import { PopularSongs } from "@/components/PopularSongs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -33,6 +34,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   const spotify = useSpotify();
   const [filter, setFilter] = useState<"all" | "spotify" | "soundcloud" | "youtube" | "local">("all");
   const [recentItems, setRecentItems] = useState<QuickPlayItem[]>([]);
+  const [playError, setPlayError] = useState<string | null>(null);
   const { recentTracks, addTrack, clearHistory } = useRecentlyPlayed();
 
   // Get playlists from Spotify
@@ -41,7 +43,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   // Build Library / Quick Access items
   useEffect(() => {
     if (playlists.length > 0) {
-      const items = playlists.slice(0, 8).map((p: any) => ({
+      const items = playlists.slice(0, 10).map((p: any) => ({
         id: p.id,
         name: p.name,
         image: p.images?.[0]?.url,
@@ -69,18 +71,33 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
 
   const playItem = async (item: QuickPlayItem) => {
     if (!spotify.tokens?.accessToken || !item.uri) return;
+    setPlayError(null);
 
     try {
-      await supabase.functions.invoke("spotify-player", {
+      // Include deviceId if known to help Spotify find the active player
+      const deviceId = spotify.playbackState?.device?.id;
+
+      const { error } = await supabase.functions.invoke("spotify-player", {
         body: {
           action: "play",
           accessToken: spotify.tokens.accessToken,
           uri: item.uri,
+          deviceId: deviceId,
         },
       });
-      spotify.refreshPlaybackState();
-    } catch (error) {
+
+      if (error) throw error;
+
+      // Short delay to allow API to update
+      setTimeout(() => spotify.refreshPlaybackState(), 500);
+    } catch (error: any) {
       console.error("Failed to play:", error);
+      // Friendly error handling
+      if (error.message?.includes("No active device")) {
+        setPlayError("No active Spotify device found. Open Spotify on your device and try again.");
+      } else {
+        setPlayError("Failed to start playback. Check your connection.");
+      }
     }
   };
 
@@ -129,15 +146,21 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
               </Button>
             ))}
           </div>
+
+          {/* Error Alert if Playback Fails */}
+          {playError && (
+            <Alert variant="destructive" className="max-w-2xl">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Playback Error</AlertTitle>
+              <AlertDescription>{playError}</AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* MIDDLE SECTION: Hero / Banner */}
-        {/* If NOT connected, show the Green Connect Card */}
         {!spotify.isConnected ? (
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1DB954]/20 via-[#1DB954]/5 to-background border border-[#1DB954]/20 p-8 md:p-12 text-center shadow-2xl">
-            {/* Decorative grid background */}
             <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,transparent,black)] pointer-events-none" />
-
             <div className="relative z-10 flex flex-col items-center justify-center space-y-6">
               <div className="h-16 w-16 bg-[#1DB954] rounded-full flex items-center justify-center shadow-lg mb-2">
                 <SpotifyIcon />
@@ -155,7 +178,6 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             </div>
           </div>
         ) : (
-          /* If CONNECTED, show a nice Welcome/Featured Banner instead of empty space */
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-white/5 p-8 shadow-lg">
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="space-y-2 text-center md:text-left">
@@ -196,7 +218,6 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                   className="group relative flex flex-col gap-2 p-3 bg-card/40 hover:bg-card/80 rounded-md transition-all duration-200 cursor-pointer border border-transparent hover:border-white/5"
                   onClick={() => playItem(item)}
                 >
-                  {/* Album Art Container */}
                   <div className="relative aspect-square w-full overflow-hidden rounded-md shadow-lg">
                     {item.image ? (
                       <img
@@ -209,8 +230,6 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                         <SpotifyIcon />
                       </div>
                     )}
-
-                    {/* Floating Play Button */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
                       <Button
                         size="icon"
@@ -219,14 +238,10 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                         <Play className="h-6 w-6 fill-current ml-1" />
                       </Button>
                     </div>
-
-                    {/* Source Badge */}
                     <div className="absolute bottom-2 left-2">
                       <SourceIcon source={item.source || "spotify"} size="xs" />
                     </div>
                   </div>
-
-                  {/* Text Info */}
                   <div className="flex flex-col gap-1">
                     <span className="font-semibold text-sm text-foreground truncate">{item.name}</span>
                     <span className="text-xs text-muted-foreground capitalize">{item.source} • Playlist</span>
@@ -242,7 +257,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
           )}
         </div>
 
-        {/* Recently Played History */}
+        {/* Recently Played */}
         <div className="space-y-4 pt-4">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5" />
@@ -251,7 +266,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
           <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
         </div>
 
-        {/* Spotify Mixes Row */}
+        {/* Spotify Mixes */}
         {spotify.isConnected && madeForYou.length > 0 && (
           <div className="space-y-4 pt-4">
             <h2 className="text-2xl font-bold text-foreground">Made For You</h2>
@@ -284,7 +299,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         )}
       </div>
 
-      {/* Right Sidebar - Forced Visibility */}
+      {/* Right Sidebar */}
       <div className="w-80 flex-shrink-0 border-l border-border/30 hidden md:block bg-background/50 backdrop-blur-sm">
         <ScrollArea className="h-full">
           <div className="p-4">
