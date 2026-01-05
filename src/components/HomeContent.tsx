@@ -35,7 +35,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   const [filter, setFilter] = useState<"all" | "spotify" | "soundcloud" | "youtube" | "local">("all");
   const [recentItems, setRecentItems] = useState<QuickPlayItem[]>([]);
   const [playError, setPlayError] = useState<string | null>(null);
-  const { recentTracks, addTrack, clearHistory } = useRecentlyPlayed();
+  const { recentTracks, addTrack } = useRecentlyPlayed(); // Removed clearHistory since it's not used by the child component
 
   // Get playlists from Spotify
   const playlists = spotify.playlists || [];
@@ -84,7 +84,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     .map((track) => ({
       ...track,
       title: track.name, // Map name -> title
-      coverUrl: track.albumArt || "", // Map albumArt -> coverUrl (handle undefined)
+      coverUrl: track.albumArt || "", // Map albumArt -> coverUrl
       playedAt: new Date(track.playedAt).toISOString(), // Convert timestamp number to ISO string
     }));
 
@@ -282,7 +282,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             <History className="w-5 h-5" />
             <h2 className="text-2xl font-bold text-foreground">Recently Played</h2>
           </div>
-          <RecentlyPlayed recentTracks={filteredRecentTracks} onClearHistory={clearHistory} />
+          <RecentlyPlayed recentTracks={filteredRecentTracks} />
         </div>
 
         {/* Spotify Mixes */}
