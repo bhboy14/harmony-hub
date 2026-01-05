@@ -97,4 +97,4 @@ serve(async (req) => {
 
       case "get_stream":
         console.log("Getting stream");
- response = await fetch("https://api.soundcloud.com/resolve?url=" + trackUrl + "&client_id=" + clientId);
+const response = await fetch(`https://api.soundcloud.com/resolve?url=${trackUrl}&client_id=${clientId}`);
