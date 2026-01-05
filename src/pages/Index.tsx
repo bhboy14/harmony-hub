@@ -189,7 +189,7 @@ const Index = () => {
         {/* Content + Now Playing */}
         <div className="flex-1 flex overflow-hidden pb-20">
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-auto">
             {activeTab === "dashboard" && <HomeContent onOpenSearch={() => setActiveTab("search")} />}
 
             {activeTab === "search" && (
