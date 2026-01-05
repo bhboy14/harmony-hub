@@ -1,0 +1,178 @@
+import React from 'react';
+import { 
+  Home, 
+  Search, 
+  Library, 
+  ChevronLeft, 
+  ChevronRight, 
+  Play, 
+  Users, 
+  X,
+  UserPlus,
+  Music
+} from 'lucide-react';
+
+const IntraJamMain = () => {
+  // Mock data based on the screenshot provided
+  const heroCards = [
+    {
+      title: "Hadal Ahbek",
+      artist: "Issam Alnajjar",
+      color: "from-blue-900 to-blue-600",
+      image: "/api/placeholder/300/300" // Blue guitar image
+    },
+    {
+      title: "Bree?",
+      artist: "Issam Alnajjar",
+      color: "from-orange-300 to-orange-100",
+      image: "/api/placeholder/300/300" // Peach sitting image
+    },
+    {
+      title: "Muharram 1445",
+      artist: "Basim Karbalaei",
+      color: "from-red-900 to-black",
+      image: "/api/placeholder/300/300" // Red/Black religious
+    },
+    {
+      title: "World of Rouze",
+      artist: "Vol 1",
+      color: "from-emerald-900 to-black",
+      image: "/api/placeholder/300/300" // Dome image
+    }
+  ];
+
+  const recentPlays = Array(12).fill({
+    title: "World of Rouze",
+    artist: "Daily Mix",
+    image: "/api/placeholder/150/150"
+  });
+
+  return (
+    <div className="flex h-screen w-full bg-black text-white font-sans overflow-hidden">
+      
+      {/* LEFT SIDEBAR (Collapsed/Mini view based on zoom) */}
+      <aside className="w-[72px] flex flex-col items-center py-6 gap-6 bg-black">
+        <Home className="w-6 h-6 text-white" />
+        <Search className="w-6 h-6 text-muted-foreground hover:text-white transition" />
+        <Library className="w-6 h-6 text-muted-foreground hover:text-white transition" />
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col bg-[#121212] rounded-lg my-2 overflow-hidden relative">
+        
+        {/* Top Bar */}
+        <header className="absolute top-0 w-full z-10 flex items-center justify-between p-4 bg-black/20 backdrop-blur-md">
+          <div className="flex gap-2">
+            <button className="bg-black/50 rounded-full p-1"><ChevronLeft className="w-6 h-6" /></button>
+            <button className="bg-black/50 rounded-full p-1"><ChevronRight className="w-6 h-6" /></button>
+          </div>
+          <div className="flex items-center gap-4">
+             <button className="text-sm font-bold bg-white text-black px-4 py-1.5 rounded-full hover:scale-105 transition">
+              Explore Premium
+            </button>
+            <div className="w-8 h-8 bg-zinc-700 rounded-full flex items-center justify-center">
+              <span className="text-xs font-bold">U</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar pt-20 px-6 pb-8">
+          
+          {/* Hero Section */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">Good Afternoon</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {heroCards.map((card, i) => (
+                <div key={i} className={`relative group aspect-square rounded overflow-hidden cursor-pointer bg-gradient-to-br ${card.color}`}>
+                   <img src={card.image} alt={card.title} className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay group-hover:scale-105 transition-transform duration-500" />
+                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-4 flex flex-col justify-end">
+                      <h3 className="font-bold text-2xl truncate shadow-black drop-shadow-md">{card.title}</h3>
+                      <p className="text-sm text-gray-200 shadow-black drop-shadow-md">{card.artist}</p>
+                   </div>
+                   <div className="absolute bottom-4 right-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all shadow-xl">
+                      <div className="bg-[#1ed760] rounded-full p-3 hover:scale-105">
+                        <Play className="w-6 h-6 text-black fill-black pl-1" />
+                      </div>
+                   </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Recently Played Section */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold hover:underline cursor-pointer">Recently Played</h2>
+              <span className="text-xs font-bold text-muted-foreground hover:underline cursor-pointer tracking-widest">SHOW ALL</span>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
+              {recentPlays.map((item, i) => (
+                <div key={i} className="bg-[#181818] p-4 rounded-md hover:bg-[#282828] transition duration-300 group cursor-pointer">
+                  <div className="relative aspect-square w-full mb-4 shadow-lg bg-zinc-800 rounded-md overflow-hidden">
+                    <img src={item.image} alt="Recent" className="w-full h-full object-cover" />
+                    <div className="absolute bottom-2 right-2 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all shadow-xl">
+                      <div className="bg-[#1ed760] rounded-full p-3 hover:scale-105">
+                        <Play className="w-5 h-5 text-black fill-black pl-1" />
+                      </div>
+                   </div>
+                  </div>
+                  <h3 className="font-bold text-white truncate text-sm">World of Rouze</h3>
+                  <p className="text-xs text-muted-foreground mt-1">Vol 1 • 2024</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+        </div>
+      </main>
+
+      {/* RIGHT SIDEBAR (Friend Activity) */}
+      <aside className="w-[280px] bg-black hidden xl:flex flex-col p-4 border-l border-[#282828]">
+        <div className="flex items-center justify-between mb-8 text-muted-foreground">
+          <span className="font-bold text-sm text-white">Friend Activity</span>
+          <UserPlus className="w-5 h-5 hover:text-white cursor-pointer" />
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
+               <Music className="w-5 h-5 text-gray-400" />
+             </div>
+             <div className="flex-1">
+               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
+               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
+             </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
+               <Music className="w-5 h-5 text-gray-400" />
+             </div>
+             <div className="flex-1">
+               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
+               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
+             </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
+               <Music className="w-5 h-5 text-gray-400" />
+             </div>
+             <div className="flex-1">
+               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
+               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
+             </div>
+          </div>
+        </div>
+        
+        <div className="mt-auto px-4 py-6 text-center">
+           <p className="text-xs text-muted-foreground mb-4">Go to Settings Social and enable 'Share my listening activity on Spotify' to share what you play with your friends.</p>
+           <button className="w-full py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition">Settings</button>
+        </div>
+      </aside>
+
+    </div>
+  );
+};
+
+export default IntraJamMain;
