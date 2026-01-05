@@ -59,6 +59,7 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
 
+  // Audio Event Listeners
   useEffect(() => {
     audioRef.current = new Audio();
     audioRef.current.addEventListener("timeupdate", () => {
@@ -73,6 +74,7 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
+  // Auto-Authentication
   useEffect(() => {
     const initializeAuth = async () => {
       const token = localStorage.getItem("SC_OAUTH_TOKEN");
@@ -119,7 +121,8 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
         id: pl.id,
         title: pl.title,
         artwork_url: pl.artwork_url,
-        track_count: pl.track_count || pl.tracks_count || 0, // Handle both cases just to be safe
+        // Handle both potential API property names just to be safe
+        track_count: pl.track_count || pl.tracks_count || 0,
       }));
       setPlaylists(formattedPlaylists);
     }
