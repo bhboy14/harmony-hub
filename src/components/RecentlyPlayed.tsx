@@ -100,9 +100,12 @@ export const RecentlyPlayed = ({ recentTracks, onClearHistory }: RecentlyPlayedP
         </Button>
       </div>
       {/* We shift everything: md gets 4 cols, lg gets 5, xl gets 7 or 8 */}{" "}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
-        {recentTracks.slice(0, 12).map((track) => (
-          <div
+      // Suggested wrapper change
+<div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 max-h-[500px] overflow-y-auto scrollbar-hide">
+  {recentTracks.slice(0, 12).map((track) => (
+    // ... card content
+  ))}
+</div>
             key={`${track.id}-${track.playedAt}`}
             className="spotify-card group cursor-pointer"
             onClick={() => playTrack(track)}
