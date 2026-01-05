@@ -69,16 +69,24 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     }
   }, [spotify.playbackState?.track?.id, spotify.playbackState?.isPlaying, addTrack]);
 
-  // Apply Filter Logic
+  // Apply Filter Logic for Library
   const filteredItems = recentItems.filter((item) => {
     if (filter === "all") return true;
     return item.source === filter;
   });
 
-  const filteredRecentTracks = recentTracks.filter((track) => {
-    if (filter === "all") return true;
-    return track.source === filter;
-  });
+  // Apply Filter and Map Data Logic for Recently Played
+  const filteredRecentTracks = recentTracks
+    .filter((track) => {
+      if (filter === "all") return true;
+      return track.source === filter;
+    })
+    .map((track) => ({
+      // Map properties to match RecentlyPlayed component's expectation
+      ...track,
+      title: track.name, // Map name -> title
+      coverUrl: track.albumArt, // Map albumArt -> coverUrl
+    }));
 
   const playItem = async (item: QuickPlayItem) => {
     if (!spotify.tokens?.accessToken || !item.uri) return;
@@ -246,7 +254,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                       </Button>
                     </div>
                     <div className="absolute bottom-2 left-2">
-                      <SourceIcon source={item.source || "spotify"} size="xs" />
+                      <SourceIcon source={item.source || "spotify"} size="sm" />
                     </div>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -278,7 +286,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         </div>
 
         {/* Spotify Mixes */}
-        {(spotify.isConnected && madeForYou.length > 0 && filter === "spotify") || filter === "all" ? (
+        {spotify.isConnected && madeForYou.length > 0 && (filter === "spotify" || filter === "all") ? (
           <div className="space-y-4 pt-4">
             <h2 className="text-2xl font-bold text-foreground">Made For You</h2>
             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
