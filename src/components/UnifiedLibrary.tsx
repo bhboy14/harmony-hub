@@ -384,10 +384,10 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
     );
   };
 
-  return (
-    <div className="space-y-6">
+return (
+    <div className="flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-shrink-0 mb-4">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Unified Library</h2>
           <p className="text-muted-foreground text-sm mt-1">
@@ -421,7 +421,7 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
       </div>
 
       {/* Source Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3 flex-shrink-0 mb-4">
         {[
           { key: 'spotify' as const, label: 'Spotify', count: spotifyTracks.length, color: '#1DB954' },
           { key: 'youtube' as const, label: 'YouTube', count: youtubeTracks.length, color: '#FF0000' },
@@ -430,34 +430,34 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
         ].map(({ key, label, count, color }) => (
           <button
             key={key}
-            className={`p-4 rounded-lg border transition-all ${
+            className={`p-3 rounded-lg border transition-all ${
               sourceFilter === key 
-                ? `border-[${color}] bg-[${color}]/10` 
+                ? 'border-primary bg-primary/10' 
                 : 'border-border bg-secondary/50 hover:bg-secondary'
             }`}
-            style={sourceFilter === key ? { borderColor: color, backgroundColor: `${color}10` } : {}}
+            style={sourceFilter === key ? { borderColor: color, backgroundColor: `${color}15` } : {}}
             onClick={() => setSourceFilter(sourceFilter === key ? 'all' : key)}
           >
             <div className="flex items-center gap-2">
               <SourceIcon source={key} showTooltip={false} />
-              <span className="font-medium text-foreground">{label}</span>
+              <span className="font-medium text-foreground text-sm">{label}</span>
             </div>
-            <p className="text-2xl font-bold text-foreground mt-2">{count}</p>
+            <p className="text-xl font-bold text-foreground mt-1">{count}</p>
           </button>
         ))}
       </div>
 
-      <Tabs defaultValue="tracks" className="space-y-4">
-        <TabsList className="bg-secondary">
+      <Tabs defaultValue="tracks" className="flex-1 min-h-0 flex flex-col">
+        <TabsList className="bg-secondary flex-shrink-0 mb-3">
           <TabsTrigger value="tracks">
             {viewMode === 'grouped' ? 'Master Tracks' : 'All Tracks'}
           </TabsTrigger>
           <TabsTrigger value="upload">Upload Local</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="tracks" className="space-y-4">
+        <TabsContent value="tracks" className="flex-1 min-h-0 flex flex-col mt-0 space-y-3">
           {/* Search */}
-          <div className="relative">
+          <div className="relative flex-shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search your library..."
@@ -469,14 +469,14 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
 
           {/* Track List with Virtual Scrolling */}
           {(isLoading || isProcessing) ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-12 flex-1">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="ml-3 text-muted-foreground">
                 {isProcessing ? 'Grouping tracks...' : 'Loading...'}
               </span>
             </div>
           ) : filteredData.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-12 flex-1">
               <Music className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
                 {tracks.length === 0 
@@ -487,7 +487,7 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
           ) : (
             <div 
               ref={scrollContainerRef}
-              className="h-[600px] overflow-auto"
+              className="flex-1 min-h-0 overflow-auto rounded-lg scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent"
               onScroll={handleScroll}
             >
               <div style={{ height: totalHeight, position: 'relative' }}>
@@ -502,7 +502,7 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryP
           )}
         </TabsContent>
 
-        <TabsContent value="upload">
+        <TabsContent value="upload" className="flex-1 min-h-0 overflow-auto mt-0">
           <LocalUploader />
         </TabsContent>
       </Tabs>
