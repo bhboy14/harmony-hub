@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from "r
 import { fetchSoundCloud, getStreamUrl } from "@/lib/soundcloud";
 import { useToast } from "@/hooks/use-toast";
 
-// Define the shape of a Track and Playlist
+// --- FIXED INTERFACE ---
 export interface Track {
   id: number;
   title: string;
@@ -16,15 +16,15 @@ export interface Playlist {
   id: number;
   title: string;
   artwork_url: string;
-  tracks_count: number;
+  track_count: number; // CHANGED from tracks_count to track_count
 }
+// -----------------------
 
-// Complete Context Type Definition
 interface SoundCloudContextType {
   isConnected: boolean;
-  isConnecting: boolean; // Renamed from isLoading to match your error if needed, or map isLoading -> isConnecting
-  isLoading: boolean; // Added to satisfy error
-  user: any | null; // Renamed from userProfile to user
+  isConnecting: boolean;
+  isLoading: boolean;
+  user: any | null;
   playlists: Playlist[];
   likedTracks: Track[];
   currentTrack: Track | null;
@@ -48,11 +48,9 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<any | null>(null);
 
-  // Data State
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [likedTracks, setLikedTracks] = useState<Track[]>([]);
 
-  // Player State
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -61,7 +59,6 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { toast } = useToast();
 
-  // Initialize Audio Element
   useEffect(() => {
     audioRef.current = new Audio();
     audioRef.current.addEventListener("timeupdate", () => {
@@ -76,7 +73,6 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
-  // 1. Auto-Authentication on Mount
   useEffect(() => {
     const initializeAuth = async () => {
       const token = localStorage.getItem("SC_OAUTH_TOKEN");
@@ -88,7 +84,6 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
           if (profile && !profile.errors) {
             setUser(profile);
             setIsConnected(true);
-            // Load initial data
             await loadPlaylists();
             await loadLikedTracks();
           } else {
@@ -105,7 +100,6 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
 
   const connect = async () => {
     setIsLoading(true);
-    // Fallback: Manually trigger re-auth check or login flow here
     window.location.reload();
   };
 
@@ -127,13 +121,10 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
     if (data && Array.isArray(data)) setLikedTracks(data);
   };
 
-  // --- Player Controls ---
-
   const play = async (track: Track) => {
     if (!audioRef.current) return;
 
     try {
-      // If same track, just toggle
       if (currentTrack?.id === track.id) {
         resume();
         return;
@@ -143,11 +134,8 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
       setCurrentTrack(track);
       setIsPlaying(true);
 
-      // Get authenticated stream URL
-      // Note: Some tracks might not have stream_url directly; usually /tracks/:id/stream
       let streamUrl = track.stream_url;
       if (!streamUrl) {
-        // Fallback construction if API didn't return it
         streamUrl = `https://api.soundcloud.com/tracks/${track.id}/stream`;
       }
 
@@ -184,7 +172,7 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
     <SoundCloudContext.Provider
       value={{
         isConnected,
-        isConnecting: isLoading, // Map loading state
+        isConnecting: isLoading,
         isLoading,
         user,
         playlists,
