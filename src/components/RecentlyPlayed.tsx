@@ -100,7 +100,7 @@ export const RecentlyPlayed = ({ recentTracks, onClearHistory }: RecentlyPlayedP
         </Button>
       </div>
       {/* We shift everything: md gets 4 cols, lg gets 5, xl gets 7 or 8 */}{" "}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
         {recentTracks.slice(0, 12).map((track) => (
           <div
             key={`${track.id}-${track.playedAt}`}
