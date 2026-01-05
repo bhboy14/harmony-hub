@@ -48,7 +48,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         name: p.name,
         image: p.images?.[0]?.url,
         uri: p.uri,
-        source: "spotify",
+        source: "spotify" as const,
       }));
       setRecentItems(items);
     }
@@ -69,12 +69,22 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     }
   }, [spotify.playbackState?.track?.id, spotify.playbackState?.isPlaying, addTrack]);
 
+  // Apply Filter Logic
+  const filteredItems = recentItems.filter((item) => {
+    if (filter === "all") return true;
+    return item.source === filter;
+  });
+
+  const filteredRecentTracks = recentTracks.filter((track) => {
+    if (filter === "all") return true;
+    return track.source === filter;
+  });
+
   const playItem = async (item: QuickPlayItem) => {
     if (!spotify.tokens?.accessToken || !item.uri) return;
     setPlayError(null);
 
     try {
-      // Include deviceId if known to help Spotify find the active player
       const deviceId = spotify.playbackState?.device?.id;
 
       const { error } = await supabase.functions.invoke("spotify-player", {
@@ -87,12 +97,9 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       });
 
       if (error) throw error;
-
-      // Short delay to allow API to update
       setTimeout(() => spotify.refreshPlaybackState(), 500);
     } catch (error: any) {
       console.error("Failed to play:", error);
-      // Friendly error handling
       if (error.message?.includes("No active device")) {
         setPlayError("No active Spotify device found. Open Spotify on your device and try again.");
       } else {
@@ -137,7 +144,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                 size="sm"
                 className={`rounded-full h-8 px-4 text-sm font-medium capitalize transition-all ${
                   filter === f
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    ? "bg-[#1DB954] text-black hover:bg-[#1ed760]"
                     : "bg-secondary/50 hover:bg-secondary text-foreground border-0"
                 }`}
                 onClick={() => setFilter(f)}
@@ -210,9 +217,9 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             <h2 className="text-2xl font-bold text-foreground">Your Library</h2>
           </div>
 
-          {recentItems.length > 0 ? (
+          {filteredItems.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {recentItems.map((item) => (
+              {filteredItems.map((item) => (
                 <div
                   key={item.id}
                   className="group relative flex flex-col gap-2 p-3 bg-card/40 hover:bg-card/80 rounded-md transition-all duration-200 cursor-pointer border border-transparent hover:border-white/5"
@@ -252,7 +259,11 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-center space-y-3 bg-secondary/20 rounded-lg border border-dashed border-white/10">
               <Library className="h-10 w-10 text-muted-foreground/50" />
-              <p className="text-muted-foreground">Your library is empty. Connect services to get started.</p>
+              <p className="text-muted-foreground">
+                {filter === "all"
+                  ? "Your library is empty. Connect services to get started."
+                  : `No ${filter} items found in your library.`}
+              </p>
             </div>
           )}
         </div>
@@ -263,11 +274,11 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             <History className="w-5 h-5" />
             <h2 className="text-2xl font-bold text-foreground">Recently Played</h2>
           </div>
-          <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
+          <RecentlyPlayed recentTracks={filteredRecentTracks} onClearHistory={clearHistory} />
         </div>
 
         {/* Spotify Mixes */}
-        {spotify.isConnected && madeForYou.length > 0 && (
+        {(spotify.isConnected && madeForYou.length > 0 && filter === "spotify") || filter === "all" ? (
           <div className="space-y-4 pt-4">
             <h2 className="text-2xl font-bold text-foreground">Made For You</h2>
             <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
@@ -276,7 +287,13 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
                   key={item.id}
                   className="flex-shrink-0 w-40 md:w-48 group cursor-pointer"
                   onClick={() =>
-                    playItem({ id: item.id, name: item.name, image: item.images?.[0]?.url, uri: item.uri })
+                    playItem({
+                      id: item.id,
+                      name: item.name,
+                      image: item.images?.[0]?.url,
+                      uri: item.uri,
+                      source: "spotify",
+                    })
                   }
                 >
                   <div className="relative mb-3">
@@ -296,7 +313,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
               ))}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Right Sidebar */}
