@@ -16,7 +16,7 @@ export interface Playlist {
   id: number;
   title: string;
   artwork_url: string;
-  track_count: number; // CHANGED from tracks_count to track_count
+  track_count: number; // FIXED: Singular to match API and Player component
 }
 // -----------------------
 
@@ -113,7 +113,16 @@ export const SoundCloudProvider = ({ children }: { children: React.ReactNode }) 
 
   const loadPlaylists = async () => {
     const data = await fetchSoundCloud("/me/playlists");
-    if (data && Array.isArray(data)) setPlaylists(data);
+    if (data && Array.isArray(data)) {
+      // Map the API response to ensure the property names match our interface
+      const formattedPlaylists = data.map((pl: any) => ({
+        id: pl.id,
+        title: pl.title,
+        artwork_url: pl.artwork_url,
+        track_count: pl.track_count || pl.tracks_count || 0, // Handle both cases just to be safe
+      }));
+      setPlaylists(formattedPlaylists);
+    }
   };
 
   const loadLikedTracks = async () => {
