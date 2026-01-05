@@ -186,10 +186,10 @@ const Index = () => {
           </div>
         </header>
 
-        {/* Content + Now Playing */}
-        <div className="flex-1 flex overflow-hidden pb-20">
+        {/* Content + Now Playing - Flex Layout */}
+        <div className="flex-1 flex overflow-hidden">
           {/* Main Content */}
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto pb-24 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
             {activeTab === "dashboard" && <HomeContent onOpenSearch={() => setActiveTab("search")} />}
 
             {activeTab === "search" && (
@@ -346,8 +346,12 @@ const Index = () => {
             )}
           </main>
 
-          {/* Now Playing Panel */}
-          <NowPlayingPanel isOpen={showNowPlaying} onClose={() => setShowNowPlaying(false)} />
+          {/* Right Sidebar - Now Playing Panel */}
+          {showNowPlaying && (
+            <aside className="w-80 border-l border-white/10 bg-black/20 flex flex-col h-full animate-in slide-in-from-right-10 duration-200">
+              <NowPlayingPanel isOpen={true} onClose={() => setShowNowPlaying(false)} />
+            </aside>
+          )}
         </div>
       </div>
 
