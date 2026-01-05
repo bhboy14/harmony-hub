@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// --- CONFIGURATION ---
+const SC_CLIENT_ID = "dH1Xed1fpITYonugor6sw39jvdq58M3h";
+const SC_OAUTH_TOKEN = "2-310286-92172367-WPpVc4VRL7UmlRO";
+// ---------------------
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,13 +29,13 @@ serve(async (req) => {
   }
 
   try {
-    // Verify user authentication
+    // 1. Verify User is logged into Supabase (optional, but good practice)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
     const supabaseClient = createClient(
@@ -41,20 +46,24 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized Supabase User" }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
+    // 2. Parse Request
     const { action, accessToken, ...params } = await req.json();
 
-    if (!accessToken) {
-      throw new Error("Access token required");
+    // 3. Use provided token OR fallback to hardcoded token
+    const tokenToUse = accessToken || SC_OAUTH_TOKEN;
+
+    if (!tokenToUse) {
+      throw new Error("Access token required (none provided and no fallback found)");
     }
 
     const headers = {
-      Authorization: `OAuth ${accessToken}`,
+      Authorization: `OAuth ${tokenToUse}`,
       Accept: "application/json",
     };
 
@@ -88,86 +97,4 @@ serve(async (req) => {
 
       case "get_stream":
         console.log("Getting stream");
-        response = await fetch("https://api.soundcloud.com/me/activities?limit=50", { headers });
-        data = await safeParseResponse(response);
-        break;
-
-      case "get_playlist_tracks":
-        console.log("Getting playlist tracks:", params.playlistId);
-        response = await fetch(`https://api.soundcloud.com/playlists/${params.playlistId}`, { headers });
-        data = await safeParseResponse(response);
-        break;
-
-      case "search":
-        console.log("Searching tracks:", params.query);
-        const searchUrl = new URL("https://api.soundcloud.com/tracks");
-        searchUrl.searchParams.append("q", params.query);
-        searchUrl.searchParams.append("limit", "30");
-        response = await fetch(searchUrl.toString(), { headers });
-        data = await safeParseResponse(response);
-        break;
-
-      case "get_track":
-        console.log("Getting track:", params.trackId);
-        response = await fetch(`https://api.soundcloud.com/tracks/${params.trackId}`, { headers });
-        data = await safeParseResponse(response);
-        break;
-
-      case "get_stream_url":
-        console.log("Getting stream URL for track:", params.trackId);
-        // First get the track to get stream info
-        response = await fetch(`https://api.soundcloud.com/tracks/${params.trackId}`, { headers });
-        const track = await safeParseResponse(response);
-        
-        if (track?.stream_url) {
-          // Get the actual stream URL
-          const streamResponse = await fetch(`${track.stream_url}?oauth_token=${accessToken}`, {
-            redirect: "manual",
-          });
-          const streamUrl = streamResponse.headers.get("location") || `${track.stream_url}?oauth_token=${accessToken}`;
-          data = { stream_url: streamUrl };
-        } else if (track?.media?.transcodings) {
-          // Use media transcodings for newer API
-          const mp3Transcoding = track.media.transcodings.find(
-            (t: any) => t.format.protocol === "progressive" && t.format.mime_type === "audio/mpeg"
-          ) || track.media.transcodings[0];
-          
-          if (mp3Transcoding) {
-            const streamResponse = await fetch(`${mp3Transcoding.url}?client_id=${Deno.env.get("SOUNDCLOUD_CLIENT_ID")}`, { headers });
-            const streamData = await safeParseResponse(streamResponse);
-            data = { stream_url: streamData?.url };
-          }
-        }
-        break;
-
-      case "get_recently_played":
-        console.log("Getting recently played (from stream)");
-        response = await fetch("https://api.soundcloud.com/me/play-history?limit=20", { headers });
-        data = await safeParseResponse(response);
-        break;
-
-      default:
-        throw new Error(`Invalid action: ${action}`);
-    }
-
-    if (response && !response.ok) {
-      const errorData = data || { error: "Unknown error" };
-      console.error("SoundCloud API error:", errorData);
-      throw new Error(errorData.error || errorData.errors?.[0]?.error_message || "API request failed");
-    }
-
-    return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error: unknown) {
-    console.error("SoundCloud player error:", error);
-    const errorMessage = error instanceof Error ? error.message : "An error occurred";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
+        response = await fetch("https://api.soundcloud
