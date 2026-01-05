@@ -1,16 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { Play, ChevronRight, Library, History } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Play, Library, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
-import { useColorExtractor } from "@/hooks/useColorExtractor";
-import { useRecentlyPlayed, RecentTrack } from "@/hooks/useRecentlyPlayed";
+import { useRecentlyPlayed } from "@/hooks/useRecentlyPlayed";
 import { RecentlyPlayed } from "@/components/RecentlyPlayed";
 import { SourceIcon } from "@/components/SourceIcon";
 import { PopularSongs } from "@/components/PopularSongs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -35,10 +33,6 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   const [filter, setFilter] = useState<"all" | "spotify" | "soundcloud" | "youtube" | "local">("all");
   const [recentItems, setRecentItems] = useState<QuickPlayItem[]>([]);
   const { recentTracks, addTrack, clearHistory } = useRecentlyPlayed();
-
-  // Get current album art for color extraction
-  const currentAlbumArt = spotify.playbackState?.track?.album?.images?.[0]?.url;
-  const { colors } = useColorExtractor(currentAlbumArt);
 
   // Get playlists from Spotify
   const playlists = spotify.playlists || [];
@@ -100,251 +94,202 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     .slice(0, 4);
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden bg-background">
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {/* Animated gradient background based on album art */}
-        <div className="relative">
-          <div
-            className="absolute inset-0 h-96 transition-all duration-1000 ease-out"
-            style={{
-              background: currentAlbumArt
-                ? `linear-gradient(180deg, hsl(${colors.vibrant}) 0%, hsl(${colors.primary}) 40%, hsl(0 0% 7%) 100%)`
-                : "linear-gradient(180deg, hsl(160 40% 20%) 0%, hsl(0 0% 7%) 100%)",
-            }}
-          >
-            {/* Animated overlay for subtle movement */}
-            <div
-              className="absolute inset-0 opacity-30 animate-pulse"
-              style={{
-                background: currentAlbumArt
-                  ? `radial-gradient(ellipse at 30% 20%, hsl(${colors.vibrant} / 0.4) 0%, transparent 50%)`
-                  : "none",
-                animationDuration: "4s",
-              }}
-            />
-            <div
-              className="absolute inset-0 opacity-20"
-              style={{
-                background: currentAlbumArt
-                  ? `radial-gradient(ellipse at 70% 60%, hsl(${colors.primary} / 0.3) 0%, transparent 50%)`
-                  : "none",
-                animation: "pulse 6s ease-in-out infinite",
-              }}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+        {/* Top Section: Search & Filter */}
+        <div className="space-y-6">
+          {/* Search Bar */}
+          <div className="relative max-w-2xl">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Search Spotify, SoundCloud, YouTube, and local files..."
+              className="pl-12 h-12 bg-secondary/50 border-0 rounded-full text-sm placeholder:text-muted-foreground shadow-sm focus-visible:ring-1 focus-visible:ring-primary"
+              onClick={onOpenSearch}
+              readOnly
             />
           </div>
 
-          {/* Content */}
-          <div className="relative p-6 space-y-6">
-            {/* Unified Search Bar */}
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1 max-w-xl">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  placeholder="Search Spotify, SoundCloud, YouTube, and local files..."
-                  className="pl-12 h-12 bg-secondary border-0 rounded-full text-sm placeholder:text-muted-foreground shadow-lg"
-                  onClick={onOpenSearch}
-                  readOnly
-                />
-              </div>
-            </div>
+          {/* Service Filters */}
+          <div className="flex gap-2">
+            {(["all", "spotify", "soundcloud", "youtube", "local"] as const).map((f) => (
+              <Button
+                key={f}
+                variant={filter === f ? "default" : "secondary"}
+                size="sm"
+                className={`rounded-full h-8 px-4 text-sm font-medium capitalize transition-all ${
+                  filter === f
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-secondary/50 hover:bg-secondary text-foreground border-0"
+                }`}
+                onClick={() => setFilter(f)}
+              >
+                {f}
+              </Button>
+            ))}
+          </div>
+        </div>
 
-            {/* Service Filters */}
-            <div className="flex gap-2">
-              {(["all", "spotify", "soundcloud", "youtube", "local"] as const).map((f) => (
-                <Button
-                  key={f}
-                  variant={filter === f ? "default" : "secondary"}
-                  size="sm"
-                  className={`rounded-full h-8 px-4 text-sm font-medium capitalize transition-all ${
-                    filter === f
-                      ? "bg-foreground text-background hover:bg-foreground/90"
-                      : "bg-white/10 hover:bg-white/20 text-foreground border-0"
-                  }`}
-                  onClick={() => setFilter(f)}
+        {/* MIDDLE SECTION: Hero / Banner */}
+        {/* If NOT connected, show the Green Connect Card */}
+        {!spotify.isConnected ? (
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1DB954]/20 via-[#1DB954]/5 to-background border border-[#1DB954]/20 p-8 md:p-12 text-center shadow-2xl">
+            {/* Decorative grid background */}
+            <div className="absolute inset-0 bg-grid-white/5 [mask-image:linear-gradient(0deg,transparent,black)] pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col items-center justify-center space-y-6">
+              <div className="h-16 w-16 bg-[#1DB954] rounded-full flex items-center justify-center shadow-lg mb-2">
+                <SpotifyIcon />
+              </div>
+              <h3 className="text-3xl md:text-4xl font-bold text-white tracking-tight">Connect to Spotify</h3>
+              <p className="text-muted-foreground max-w-lg mx-auto text-lg">
+                Link your account to unlock your playlists, daily mixes, and cross-platform playback history.
+              </p>
+              <Button
+                onClick={spotify.connect}
+                className="bg-[#1DB954] text-black hover:bg-[#1ed760] font-bold rounded-full px-8 py-6 h-auto text-lg transition-transform hover:scale-105 shadow-[0_0_20px_-5px_#1DB954]"
+              >
+                Connect Spotify
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* If CONNECTED, show a nice Welcome/Featured Banner instead of empty space */
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-primary/20 to-secondary/20 border border-white/5 p-8 shadow-lg">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center md:text-left">
+                <h2 className="text-2xl font-bold text-white">Welcome Back</h2>
+                <p className="text-muted-foreground">Ready to jump back into the flow?</p>
+              </div>
+              {recentItems[0] && (
+                <div
+                  className="flex items-center gap-4 bg-black/20 p-2 pr-4 rounded-full hover:bg-black/40 transition-colors cursor-pointer border border-white/5"
+                  onClick={() => playItem(recentItems[0])}
                 >
-                  {f}
-                </Button>
-              ))}
-            </div>
-
-            {/* Library Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Library className="w-5 h-5" />
-                <h2 className="text-2xl font-bold text-foreground">Your Library</h2>
-              </div>
-
-              {recentItems.length > 0 ? (
-                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {recentItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="group flex items-center gap-0 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all duration-200"
-                      onClick={() => playItem(item)}
-                    >
-                      {/* Album Art */}
-                      <div className="w-16 h-16 flex-shrink-0 shadow-lg relative">
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-secondary flex items-center justify-center">
-                            <SpotifyIcon />
-                          </div>
-                        )}
-                        <div className="absolute bottom-1 left-1">
-                          <SourceIcon source={item.source || "spotify"} size="xs" />
-                        </div>
-                      </div>
-                      {/* Title */}
-                      <span className="flex-1 font-semibold text-sm text-foreground truncate px-4">{item.name}</span>
-                      {/* Play Button - appears on hover */}
-                      <Button
-                        size="icon"
-                        className="h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-xl opacity-0 group-hover:opacity-100 mr-3 transition-all duration-200 hover:scale-105"
-                      >
-                        <Play className="h-5 w-5 fill-current ml-0.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-muted-foreground text-sm italic py-4">
-                  Connect services to populate your library.
+                  <div className="h-12 w-12 rounded-full overflow-hidden">
+                    <img src={recentItems[0].image} alt="Art" className="h-full w-full object-cover" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold text-white">Jump back in</p>
+                    <p className="text-xs text-muted-foreground truncate max-w-[150px]">{recentItems[0].name}</p>
+                  </div>
+                  <Play className="h-5 w-5 text-primary ml-2" />
                 </div>
               )}
             </div>
-
-            {/* Connect Spotify prompt if not connected */}
-            {!spotify.isConnected && (
-              <div className="bg-gradient-to-r from-primary/20 to-primary/10 rounded-lg p-6 text-center mt-6">
-                <h3 className="text-xl font-bold text-foreground mb-2">Connect to Spotify</h3>
-                <p className="text-muted-foreground mb-4">
-                  Link your Spotify account to see your playlists and play music
-                </p>
-                <Button
-                  onClick={spotify.connect}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-8"
-                >
-                  Connect Spotify
-                </Button>
-              </div>
-            )}
           </div>
+        )}
+
+        {/* Library Grid */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Library className="w-5 h-5" />
+            <h2 className="text-2xl font-bold text-foreground">Your Library</h2>
+          </div>
+
+          {recentItems.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {recentItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="group relative flex flex-col gap-2 p-3 bg-card/40 hover:bg-card/80 rounded-md transition-all duration-200 cursor-pointer border border-transparent hover:border-white/5"
+                  onClick={() => playItem(item)}
+                >
+                  {/* Album Art Container */}
+                  <div className="relative aspect-square w-full overflow-hidden rounded-md shadow-lg">
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-secondary flex items-center justify-center">
+                        <SpotifyIcon />
+                      </div>
+                    )}
+
+                    {/* Floating Play Button */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
+                      <Button
+                        size="icon"
+                        className="h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-xl hover:scale-105 transition-transform"
+                      >
+                        <Play className="h-6 w-6 fill-current ml-1" />
+                      </Button>
+                    </div>
+
+                    {/* Source Badge */}
+                    <div className="absolute bottom-2 left-2">
+                      <SourceIcon source={item.source || "spotify"} size="xs" />
+                    </div>
+                  </div>
+
+                  {/* Text Info */}
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-sm text-foreground truncate">{item.name}</span>
+                    <span className="text-xs text-muted-foreground capitalize">{item.source} • Playlist</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center space-y-3 bg-secondary/20 rounded-lg border border-dashed border-white/10">
+              <Library className="h-10 w-10 text-muted-foreground/50" />
+              <p className="text-muted-foreground">Your library is empty. Connect services to get started.</p>
+            </div>
+          )}
         </div>
 
-        {/* Unified Playback History Section */}
-        <div className="px-6 pb-8">
-          <div className="flex items-center gap-2 mb-4 mt-2">
+        {/* Recently Played History */}
+        <div className="space-y-4 pt-4">
+          <div className="flex items-center gap-2">
             <History className="w-5 h-5" />
             <h2 className="text-2xl font-bold text-foreground">Recently Played</h2>
           </div>
-
-          {/* 1. Local/Mixed History */}
           <RecentlyPlayed recentTracks={recentTracks} onClearHistory={clearHistory} />
-
-          {/* 2. Spotify History (Stream) */}
-          {spotify.isConnected && spotify.recentlyPlayed.length > 0 && (
-            <section className="mt-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-muted-foreground flex items-center gap-2">
-                  <SpotifyIcon />
-                  Spotify History
-                </h3>
-                <button
-                  onClick={() => spotify.loadRecentlyPlayed()}
-                  className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Refresh
-                </button>
-              </div>
-
-              <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
-                {spotify.recentlyPlayed.map((item: any, index: number) => (
-                  <div
-                    key={`${item.track.id}-${index}`}
-                    className="flex-shrink-0 w-44 group cursor-pointer"
-                    onClick={() => spotify.play(undefined, [item.track.uri])}
-                  >
-                    <div className="relative mb-3">
-                      <div className="aspect-square rounded-lg overflow-hidden shadow-lg bg-secondary">
-                        {item.track.album?.images?.[0]?.url ? (
-                          <img
-                            src={item.track.album.images[0].url}
-                            alt={item.track.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
-                            <SpotifyIcon />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        size="icon"
-                        className="absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-2xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-105"
-                      >
-                        <Play className="h-6 w-6 fill-current ml-0.5" />
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-foreground truncate text-sm">{item.track.name}</h3>
-                      <SourceIcon source="spotify" size="sm" />
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-1 mt-1">
-                      {item.track.artists?.map((a: any) => a.name).join(", ")}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 3. Spotify "Made For You" (Mixes) */}
-          {madeForYou.length > 0 && (
-            <section className="mt-8 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-muted-foreground">Made For You</h3>
-              </div>
-              <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
-                {madeForYou.map((item: any) => (
-                  <div
-                    key={item.id}
-                    className="flex-shrink-0 w-44 group cursor-pointer"
-                    onClick={() =>
-                      playItem({ id: item.id, name: item.name, image: item.images?.[0]?.url, uri: item.uri })
-                    }
-                  >
-                    <div className="relative mb-3">
-                      <div className="aspect-square rounded-lg overflow-hidden shadow-lg bg-secondary">
-                        {item.images?.[0]?.url ? (
-                          <img src={item.images[0].url} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-secondary to-muted flex items-center justify-center">
-                            <SpotifyIcon />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        size="icon"
-                        className="absolute bottom-2 right-2 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-2xl opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300 hover:scale-105"
-                      >
-                        <Play className="h-6 w-6 fill-current ml-0.5" />
-                      </Button>
-                    </div>
-                    <h3 className="font-semibold text-foreground truncate text-sm">{item.name}</h3>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-1">Mixed for you</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
         </div>
+
+        {/* Spotify Mixes Row */}
+        {spotify.isConnected && madeForYou.length > 0 && (
+          <div className="space-y-4 pt-4">
+            <h2 className="text-2xl font-bold text-foreground">Made For You</h2>
+            <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-6 px-6">
+              {madeForYou.map((item: any) => (
+                <div
+                  key={item.id}
+                  className="flex-shrink-0 w-40 md:w-48 group cursor-pointer"
+                  onClick={() =>
+                    playItem({ id: item.id, name: item.name, image: item.images?.[0]?.url, uri: item.uri })
+                  }
+                >
+                  <div className="relative mb-3">
+                    <div className="aspect-square rounded-md overflow-hidden shadow-lg bg-secondary">
+                      {item.images?.[0]?.url ? (
+                        <img src={item.images[0].url} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-secondary flex items-center justify-center">
+                          <SpotifyIcon />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="font-semibold text-foreground truncate text-sm">{item.name}</h3>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1">Mixed for you</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Right Sidebar - Popular Songs */}
-      <div className="w-80 flex-shrink-0 p-4 border-l border-border/30 hidden xl:block overflow-y-auto custom-scrollbar">
-        <PopularSongs title="Popular Songs" />
+      {/* Right Sidebar - Forced Visibility */}
+      <div className="w-80 flex-shrink-0 border-l border-border/30 hidden md:block bg-background/50 backdrop-blur-sm">
+        <ScrollArea className="h-full">
+          <div className="p-4">
+            <PopularSongs title="Popular Songs" />
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );
