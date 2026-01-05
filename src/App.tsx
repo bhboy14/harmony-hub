@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect } from "react"; // Added useEffect
+import { useEffect } from "react";
 import { SpotifyProvider } from "@/contexts/SpotifyContext";
 import { SoundCloudProvider } from "@/contexts/SoundCloudContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -25,8 +25,9 @@ const SC_OAUTH_TOKEN = "2-310286-92172367-WPpVc4VRL7UmlRO";
 // ------------------------------
 
 const App = () => {
-  // Initialize SoundCloud Credentials on App Mount
   useEffect(() => {
+    // 1. Initialize Credentials in localStorage
+    // This allows src/lib/soundcloud.ts to read them without prop drilling
     localStorage.setItem("SC_CLIENT_ID", SC_CLIENT_ID);
     localStorage.setItem("SC_OAUTH_TOKEN", SC_OAUTH_TOKEN);
     console.log("Harmony Hub: SoundCloud credentials initialized.");
@@ -50,7 +51,6 @@ const App = () => {
                         <Route path="/profile" element={<Profile />} />
                         <Route path="/spotify-callback" element={<SpotifyCallback />} />
                         <Route path="/soundcloud-callback" element={<SoundCloudCallback />} />
-                        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                         <Route path="*" element={<NotFound />} />
                       </Routes>
                     </BrowserRouter>
