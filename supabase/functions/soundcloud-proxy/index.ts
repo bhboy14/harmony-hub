@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- CONFIGURATION ---
 const SC_CLIENT_ID = "dH1Xed1fpITYonugor6sw39jvdq58M3h";
-const SC_OAUTH_TOKEN = "2-310286-92172367-WPpVc4VRL7UmlRO";
+const SC_OAUTH_TOKEN = "OAuth 2-310286-92172367-WPpVc4VRL7UmlRO";
 // ---------------------
 
 const corsHeaders = {
