@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// --- CONFIGURATION ---
+const SC_CLIENT_ID = "dH1Xed1fpITYonugor6sw39jvdq58M3h";
+const SC_OAUTH_TOKEN = "2-310286-92172367-WPpVc4VRL7UmlRO";
+// ---------------------
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,50 +29,37 @@ serve(async (req) => {
   }
 
   try {
-    // Verify user authentication
+    // 1. Verify User Authentication (Security Check)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       console.log("No authorization header provided");
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseClient = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_ANON_KEY") ?? "", {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseClient.auth.getUser();
     if (authError || !user) {
       console.log("Authentication failed:", authError?.message);
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     console.log("Authenticated user:", user.id);
 
-    // Fetch user's SoundCloud token from database (token never touches client)
-    const { data: tokenData, error: tokenError } = await supabaseClient
-      .from('user_api_tokens')
-      .select('access_token, refresh_token, expires_at')
-      .eq('user_id', user.id)
-      .eq('provider', 'soundcloud')
-      .maybeSingle();
-
-    if (tokenError || !tokenData) {
-      console.log("No SoundCloud token found for user");
-      return new Response(
-        JSON.stringify({ error: "Not connected to SoundCloud" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const accessToken = tokenData.access_token;
+    // 2. Set Token (Use Hardcoded Credentials directly)
+    // We skip the database lookup to force usage of the known working keys
+    const accessToken = SC_OAUTH_TOKEN;
     const { action, ...params } = await req.json();
 
     const headers = {
@@ -135,7 +127,7 @@ serve(async (req) => {
         // First get the track to get stream info
         response = await fetch(`https://api.soundcloud.com/tracks/${params.trackId}`, { headers });
         const track = await safeParseResponse(response);
-        
+
         if (track?.stream_url) {
           // Get the actual stream URL
           const streamResponse = await fetch(`${track.stream_url}?oauth_token=${accessToken}`, {
@@ -145,12 +137,14 @@ serve(async (req) => {
           data = { stream_url: streamUrl };
         } else if (track?.media?.transcodings) {
           // Use media transcodings for newer API
-          const mp3Transcoding = track.media.transcodings.find(
-            (t: any) => t.format.protocol === "progressive" && t.format.mime_type === "audio/mpeg"
-          ) || track.media.transcodings[0];
-          
+          const mp3Transcoding =
+            track.media.transcodings.find(
+              (t: any) => t.format.protocol === "progressive" && t.format.mime_type === "audio/mpeg",
+            ) || track.media.transcodings[0];
+
           if (mp3Transcoding) {
-            const streamResponse = await fetch(`${mp3Transcoding.url}?client_id=${Deno.env.get("SOUNDCLOUD_CLIENT_ID")}`, { headers });
+            // UPDATED: Use the hardcoded SC_CLIENT_ID here
+            const streamResponse = await fetch(`${mp3Transcoding.url}?client_id=${SC_CLIENT_ID}`, { headers });
             const streamData = await safeParseResponse(streamResponse);
             data = { stream_url: streamData?.url };
           }
@@ -179,12 +173,9 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error("SoundCloud proxy error:", error);
     const errorMessage = error instanceof Error ? error.message : "An error occurred";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: errorMessage }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
