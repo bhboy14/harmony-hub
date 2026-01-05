@@ -1,178 +1,198 @@
-import React from 'react';
-import { 
-  Home, 
-  Search, 
-  Library, 
-  ChevronLeft, 
-  ChevronRight, 
-  Play, 
-  Users, 
-  X,
-  UserPlus,
-  Music
-} from 'lucide-react';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-const IntraJamMain = () => {
-  // Mock data based on the screenshot provided
-  const heroCards = [
-    {
-      title: "Hadal Ahbek",
-      artist: "Issam Alnajjar",
-      color: "from-blue-900 to-blue-600",
-      image: "/api/placeholder/300/300" // Blue guitar image
-    },
-    {
-      title: "Bree?",
-      artist: "Issam Alnajjar",
-      color: "from-orange-300 to-orange-100",
-      image: "/api/placeholder/300/300" // Peach sitting image
-    },
-    {
-      title: "Muharram 1445",
-      artist: "Basim Karbalaei",
-      color: "from-red-900 to-black",
-      image: "/api/placeholder/300/300" // Red/Black religious
-    },
-    {
-      title: "World of Rouze",
-      artist: "Vol 1",
-      color: "from-emerald-900 to-black",
-      image: "/api/placeholder/300/300" // Dome image
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Amiri:wght@400;700&display=swap");
+
+@layer base {
+  :root {
+    /* Spotify-inspired dark theme */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 141 76% 48%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 141 76% 48%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 62% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 14%;
+    --ring: 141 76% 48%;
+
+    --radius: 0.5rem;
+
+    /* Spotify green */
+    --spotify-green: 141 76% 48%;
+    --spotify-green-hover: 141 76% 55%;
+
+    /* Surface levels */
+    --surface-0: 0 0% 0%;
+    --surface-1: 0 0% 7%;
+    --surface-2: 0 0% 12%;
+    --surface-3: 0 0% 18%;
+    --surface-elevated: 0 0% 14%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(180deg, hsl(160 40% 20%) 0%, hsl(0 0% 7%) 100%);
+    --gradient-card-hover: linear-gradient(180deg, hsl(0 0% 18%) 0%, hsl(0 0% 12%) 100%);
+
+    /* Shadows */
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 141 76% 48%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 141 76% 48%;
+  }
+
+  .dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      sans-serif;
+  }
+
+  .font-arabic {
+    font-family: "Amiri", serif;
+  }
+}
+
+@layer components {
+  /* Spotify-style cards */
+  .spotify-card {
+    @apply bg-card rounded-lg p-4 transition-all duration-300;
+    background: linear-gradient(180deg, hsl(0 0% 12%) 0%, hsl(0 0% 7%) 100%);
+  }
+
+  .spotify-card:hover {
+    background: linear-gradient(180deg, hsl(0 0% 20%) 0%, hsl(0 0% 14%) 100%);
+  }
+
+  /* Quick play row cards */
+  .quick-play-card {
+    @apply flex items-center gap-4 bg-card/60 rounded-md overflow-hidden transition-all;
+    @apply hover:bg-card cursor-pointer;
+  }
+
+  .quick-play-card:hover .play-btn {
+    @apply opacity-100 translate-y-0;
+  }
+
+  .play-btn {
+    @apply opacity-0 translate-y-2 transition-all duration-200;
+  }
+
+  /* Glass panel */
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Section title style */
+  .section-title {
+    @apply text-2xl font-bold text-foreground;
+  }
+
+  /* Scrollbar styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 30%);
+    border-radius: 6px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(0 0% 45%);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  /* Now playing gradient */
+  .now-playing-gradient {
+    background: linear-gradient(180deg, hsl(var(--primary) / 0.4) 0%, hsl(0 0% 7%) 50%);
+  }
+}
+
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
     }
-  ];
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 
-  const recentPlays = Array(12).fill({
-    title: "World of Rouze",
-    artist: "Daily Mix",
-    image: "/api/placeholder/150/150"
-  });
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
 
-  return (
-    <div className="flex h-screen w-full bg-black text-white font-sans overflow-hidden">
-      
-      {/* LEFT SIDEBAR (Collapsed/Mini view based on zoom) */}
-      <aside className="w-[72px] flex flex-col items-center py-6 gap-6 bg-black">
-        <Home className="w-6 h-6 text-white" />
-        <Search className="w-6 h-6 text-muted-foreground hover:text-white transition" />
-        <Library className="w-6 h-6 text-muted-foreground hover:text-white transition" />
-      </aside>
+  .animate-shimmer {
+    background: linear-gradient(90deg, transparent, hsl(var(--accent) / 0.1), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
 
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 flex flex-col bg-[#121212] rounded-lg my-2 overflow-hidden relative">
-        
-        {/* Top Bar */}
-        <header className="absolute top-0 w-full z-10 flex items-center justify-between p-4 bg-black/20 backdrop-blur-md">
-          <div className="flex gap-2">
-            <button className="bg-black/50 rounded-full p-1"><ChevronLeft className="w-6 h-6" /></button>
-            <button className="bg-black/50 rounded-full p-1"><ChevronRight className="w-6 h-6" /></button>
-          </div>
-          <div className="flex items-center gap-4">
-             <button className="text-sm font-bold bg-white text-black px-4 py-1.5 rounded-full hover:scale-105 transition">
-              Explore Premium
-            </button>
-            <div className="w-8 h-8 bg-zinc-700 rounded-full flex items-center justify-center">
-              <span className="text-xs font-bold">U</span>
-            </div>
-          </div>
-        </header>
-
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar pt-20 px-6 pb-8">
-          
-          {/* Hero Section */}
-          <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">Good Afternoon</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {heroCards.map((card, i) => (
-                <div key={i} className={`relative group aspect-square rounded overflow-hidden cursor-pointer bg-gradient-to-br ${card.color}`}>
-                   <img src={card.image} alt={card.title} className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay group-hover:scale-105 transition-transform duration-500" />
-                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent p-4 flex flex-col justify-end">
-                      <h3 className="font-bold text-2xl truncate shadow-black drop-shadow-md">{card.title}</h3>
-                      <p className="text-sm text-gray-200 shadow-black drop-shadow-md">{card.artist}</p>
-                   </div>
-                   <div className="absolute bottom-4 right-4 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all shadow-xl">
-                      <div className="bg-[#1ed760] rounded-full p-3 hover:scale-105">
-                        <Play className="w-6 h-6 text-black fill-black pl-1" />
-                      </div>
-                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Recently Played Section */}
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold hover:underline cursor-pointer">Recently Played</h2>
-              <span className="text-xs font-bold text-muted-foreground hover:underline cursor-pointer tracking-widest">SHOW ALL</span>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
-              {recentPlays.map((item, i) => (
-                <div key={i} className="bg-[#181818] p-4 rounded-md hover:bg-[#282828] transition duration-300 group cursor-pointer">
-                  <div className="relative aspect-square w-full mb-4 shadow-lg bg-zinc-800 rounded-md overflow-hidden">
-                    <img src={item.image} alt="Recent" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-2 right-2 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all shadow-xl">
-                      <div className="bg-[#1ed760] rounded-full p-3 hover:scale-105">
-                        <Play className="w-5 h-5 text-black fill-black pl-1" />
-                      </div>
-                   </div>
-                  </div>
-                  <h3 className="font-bold text-white truncate text-sm">World of Rouze</h3>
-                  <p className="text-xs text-muted-foreground mt-1">Vol 1 • 2024</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-        </div>
-      </main>
-
-      {/* RIGHT SIDEBAR (Friend Activity) */}
-      <aside className="w-[280px] bg-black hidden xl:flex flex-col p-4 border-l border-[#282828]">
-        <div className="flex items-center justify-between mb-8 text-muted-foreground">
-          <span className="font-bold text-sm text-white">Friend Activity</span>
-          <UserPlus className="w-5 h-5 hover:text-white cursor-pointer" />
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
-               <Music className="w-5 h-5 text-gray-400" />
-             </div>
-             <div className="flex-1">
-               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
-               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
-             </div>
-          </div>
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
-               <Music className="w-5 h-5 text-gray-400" />
-             </div>
-             <div className="flex-1">
-               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
-               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
-             </div>
-          </div>
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center">
-               <Music className="w-5 h-5 text-gray-400" />
-             </div>
-             <div className="flex-1">
-               <div className="h-2 bg-zinc-800 rounded w-3/4 mb-2"></div>
-               <div className="h-2 bg-zinc-800 rounded w-1/2"></div>
-             </div>
-          </div>
-        </div>
-        
-        <div className="mt-auto px-4 py-6 text-center">
-           <p className="text-xs text-muted-foreground mb-4">Go to Settings Social and enable 'Share my listening activity on Spotify' to share what you play with your friends.</p>
-           <button className="w-full py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition">Settings</button>
-        </div>
-      </aside>
-
-    </div>
-  );
-};
-
-export default IntraJamMain;
+  /* Spotify green hover */
+  .hover-spotify:hover {
+    color: hsl(var(--spotify-green));
+  }
+}
