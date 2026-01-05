@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Bell, Volume2, Settings2, Clock, Play, Pause, Upload, RotateCcw, Music, VolumeX, Mic, X, Check } from "lucide-react";
+import { Bell, Volume2, Settings2, Clock, Play, Pause, Upload, RotateCcw, Music, VolumeX, Mic, X, Check, MapPin } from "lucide-react";
 import { AzanPlayerSettings, MusicStopMode, PostAzanAction } from "@/hooks/useAzanPlayer";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { LocationPrayerTimes, PrayerTimeData } from "@/components/LocationPrayerTimes";
 
 interface AzanPlayerProps {
   isAzanPlaying?: boolean;
@@ -20,6 +21,8 @@ interface AzanPlayerProps {
   onClearPrayerAnnouncement?: (prayer: string) => void;
   nextScheduledPrayer?: string | null;
   prayerList?: string[];
+  onPrayerTimesUpdate?: (times: PrayerTimeData[]) => void;
+  onLocationChange?: (location: { country: string; city: string }) => void;
 }
 
 export const AzanPlayer = ({ 
@@ -34,6 +37,8 @@ export const AzanPlayer = ({
   onClearPrayerAnnouncement,
   nextScheduledPrayer,
   prayerList = ["Fajr", "Dhuhr", "Asr", "Maghrib", "Isha"],
+  onPrayerTimesUpdate,
+  onLocationChange,
 }: AzanPlayerProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const announcementInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -131,6 +136,11 @@ export const AzanPlayer = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Location Settings - First */}
+        <LocationPrayerTimes 
+          onTimesUpdate={onPrayerTimesUpdate || (() => {})} 
+          onLocationChange={onLocationChange}
+        />
         {/* Custom Azan File */}
         <div className="space-y-3">
           <Label className="text-sm text-muted-foreground flex items-center gap-2">

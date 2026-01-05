@@ -45,7 +45,7 @@ const Index = () => {
   const [showNowPlaying, setShowNowPlaying] = useState(false);
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
-  const { prayerTimes, nextPrayer, timeUntilNext } = usePrayerTimes();
+  const { prayerTimes, nextPrayer, timeUntilNext, updatePrayerTimes, updateLocation } = usePrayerTimes();
   const mediaLibrary = useMediaLibrary();
   const spotify = useSpotify();
   const unifiedAudio = useUnifiedAudio();
@@ -270,6 +270,8 @@ const Index = () => {
                   onClearPrayerAnnouncement={azanScheduler.clearPrayerAnnouncementAudio}
                   nextScheduledPrayer={azanScheduler.nextScheduledPrayer}
                   prayerList={azanScheduler.PRAYER_LIST}
+                  onPrayerTimesUpdate={updatePrayerTimes}
+                  onLocationChange={updateLocation}
                 />
               </div>
             )}
