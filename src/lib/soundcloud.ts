@@ -1,53 +1,82 @@
-// src/lib/soundcloud.ts
+import { supabase } from "@/integrations/supabase/client";
 
-const SC_API_BASE = "https://api.soundcloud.com";
-
-export const soundCloudHeaders = () => {
-  const token = localStorage.getItem("SC_OAUTH_TOKEN");
-  return {
-    Authorization: `OAuth ${token}`,
-    "Content-Type": "application/json",
-  };
-};
+// This file now talks to your Supabase Edge Function to avoid CORS errors.
 
 /**
- * Helper to make authenticated requests to SoundCloud
+ * Helper to make authenticated requests via the Supabase Proxy
  */
 export const fetchSoundCloud = async (endpoint: string) => {
-  // Ensure endpoint starts with /
-  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
-  const headers = soundCloudHeaders();
+  let action = "";
+  const params: any = {};
 
-  if (!headers.Authorization.includes("OAuth")) {
-    console.warn("SoundCloud Token missing. Make sure App.tsx has initialized it.");
+  // 1. Map the endpoint URL to the specific Proxy Action
+  if (endpoint === "/me") {
+    action = "get_me";
+  } else if (endpoint === "/me/playlists") {
+    action = "get_playlists";
+  } else if (endpoint === "/me/likes/tracks") {
+    action = "get_likes";
+  } else if (endpoint.startsWith("/tracks/")) {
+    action = "get_track";
+    // Extract ID from string "/tracks/12345"
+    const parts = endpoint.split("/");
+    if (parts[2]) params.trackId = parts[2];
+  } else {
+    console.warn("Unknown SoundCloud endpoint:", endpoint);
+    return null;
   }
 
   try {
-    const response = await fetch(`${SC_API_BASE}${path}`, {
-      method: "GET",
-      headers: headers,
+    // 2. Call the Supabase Edge Function
+    // Ensure your function in Supabase is named 'soundcloud-proxy'
+    const { data, error } = await supabase.functions.invoke("soundcloud-proxy", {
+      body: { action, ...params },
     });
 
-    if (!response.ok) {
-      console.error(`SoundCloud API Error: ${response.statusText}`);
-      throw new Error(response.statusText);
+    if (error) {
+      console.error("Supabase Proxy Error:", error);
+      return null;
     }
 
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching from SoundCloud:", error);
+    return data;
+  } catch (err) {
+    console.error("Network Error:", err);
     return null;
   }
 };
 
 /**
- * Helper to get the Stream URL for a track
+ * Helper to get the Stream URL via Proxy
  */
 export const getStreamUrl = async (trackUrl: string) => {
-  const token = localStorage.getItem("SC_OAUTH_TOKEN");
-  if (!token) return trackUrl;
+  // trackUrl usually looks like "https://api.soundcloud.com/tracks/123456/stream"
+  // We need to extract the ID to ask the proxy for a signed link.
 
-  // Append the token to the stream URL so the audio element can play it
-  const separator = trackUrl.includes("?") ? "&" : "?";
-  return `${trackUrl}${separator}oauth_token=${token}`;
+  // Regex to find the track ID
+  const match = trackUrl.match(/tracks\/(\d+)/);
+  const trackId = match ? match[1] : null;
+
+  if (!trackId) {
+    console.error("Could not extract Track ID from URL:", trackUrl);
+    return trackUrl;
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke("soundcloud-proxy", {
+      body: {
+        action: "get_stream_url",
+        trackId: trackId,
+      },
+    });
+
+    if (error || !data?.stream_url) {
+      console.error("Failed to get stream URL from proxy", error);
+      return trackUrl;
+    }
+
+    return data.stream_url;
+  } catch (e) {
+    console.error("Error getting stream URL:", e);
+    return trackUrl;
+  }
 };
