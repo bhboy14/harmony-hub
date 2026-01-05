@@ -1,10 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export interface PrayerTime {
   name: string;
   arabicName: string;
   time: string;
   isNext: boolean;
+}
+
+export interface LocationSettings {
+  country: string;
+  city: string;
 }
 
 export const usePrayerTimes = () => {
@@ -19,6 +24,22 @@ export const usePrayerTimes = () => {
 
   const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
   const [timeUntilNext, setTimeUntilNext] = useState<string>("");
+  const [location, setLocation] = useState<LocationSettings>({
+    country: localStorage.getItem('prayerCountry') || "Saudi Arabia",
+    city: localStorage.getItem('prayerCity') || "Mecca",
+  });
+
+  // Update prayer times from external data
+  const updatePrayerTimes = useCallback((times: { name: string; arabicName: string; time: string }[]) => {
+    setPrayerTimes(times.map(t => ({ ...t, isNext: false })));
+  }, []);
+
+  // Update location
+  const updateLocation = useCallback((newLocation: LocationSettings) => {
+    setLocation(newLocation);
+    localStorage.setItem('prayerCountry', newLocation.country);
+    localStorage.setItem('prayerCity', newLocation.city);
+  }, []);
 
   useEffect(() => {
     const updateNextPrayer = () => {
@@ -53,7 +74,15 @@ export const usePrayerTimes = () => {
     updateNextPrayer();
     const interval = setInterval(updateNextPrayer, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [prayerTimes]);
 
-  return { prayerTimes, nextPrayer, timeUntilNext, setPrayerTimes };
+  return { 
+    prayerTimes, 
+    nextPrayer, 
+    timeUntilNext, 
+    setPrayerTimes,
+    updatePrayerTimes,
+    location,
+    updateLocation,
+  };
 };
