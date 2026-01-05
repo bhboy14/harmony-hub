@@ -82,10 +82,10 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       return track.source === filter;
     })
     .map((track) => ({
-      // Map properties to match RecentlyPlayed component's expectation
       ...track,
       title: track.name, // Map name -> title
-      coverUrl: track.albumArt, // Map albumArt -> coverUrl
+      coverUrl: track.albumArt || "", // Map albumArt -> coverUrl (handle undefined)
+      playedAt: new Date(track.playedAt).toISOString(), // Convert timestamp number to ISO string
     }));
 
   const playItem = async (item: QuickPlayItem) => {
