@@ -108,15 +108,21 @@ export const PlaybackBar = () => {
     pa.setMicVolume(paVolume);
   }, [paVolume, pa]);
 
-  // Apply music channel volume - this controls the effective volume for music sources
-  // The actual audio elements get: (masterVolume * musicChannelVolume / 100)
+  // Apply music channel volume to all audio sources immediately
   useEffect(() => {
     const effectiveVolume = isMuted ? 0 : Math.round((volume * musicVolume) / 100);
-    // Apply directly to the audio refs via the unified context's localAudioRef
+    const normalizedVolume = effectiveVolume / 100;
+    
+    // Apply to local audio
     if (unified.localAudioRef?.current) {
-      unified.localAudioRef.current.volume = effectiveVolume / 100;
+      unified.localAudioRef.current.volume = normalizedVolume;
     }
-  }, [volume, musicVolume, isMuted, unified.localAudioRef]);
+    
+    // Apply to Spotify via their API (debounced to avoid API spam)
+    if (activeSource === 'spotify' && spotify.isConnected) {
+      spotify.setVolume(effectiveVolume).catch(() => {});
+    }
+  }, [volume, musicVolume, isMuted, unified.localAudioRef, activeSource, spotify]);
 
   // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
   const normalizeToSeconds = (time: number | undefined) => {
