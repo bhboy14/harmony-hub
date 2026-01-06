@@ -1,8 +1,9 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { usePA } from "@/contexts/PAContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 import { CastButton } from "@/components/CastButton";
 import { 
@@ -19,7 +20,10 @@ import {
   Mic,
   MicOff,
   Monitor,
-  Sliders
+  Sliders,
+  Radio,
+  Music,
+  Volume1
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,13 +44,20 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
 
 export const PlaybackBar = () => {
   const unified = useUnifiedAudio();
   const spotify = useSpotify();
+  const pa = usePA();
   const [queueOpen, setQueueOpen] = useState(false);
-  const [micEnabled, setMicEnabled] = useState(false);
   const [mixerOpen, setMixerOpen] = useState(false);
+  
+  // Channel volumes (stored locally, could be moved to context for persistence)
+  const [musicVolume, setMusicVolume] = useState(100);
+  const [azanVolume, setAzanVolume] = useState(100);
+  const [paVolume, setPaVolume] = useState(80);
 
   const {
     activeSource,
@@ -77,6 +88,11 @@ export const PlaybackBar = () => {
     toggleMute,
   } = unified;
 
+  // Sync PA mic volume with slider
+  useEffect(() => {
+    pa.setMicVolume(paVolume);
+  }, [paVolume, pa]);
+
   // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
   const normalizeToSeconds = (time: number | undefined) => {
     if (time === undefined || isNaN(time) || time < 0) return 0;
@@ -96,9 +112,16 @@ export const PlaybackBar = () => {
     await seek(seekTarget);
   };
 
-  const handleMicToggle = () => {
-    setMicEnabled(!micEnabled);
-    // TODO: Integrate with actual microphone/PA system
+  const handleMicToggle = async () => {
+    await pa.toggleBroadcast();
+  };
+
+  // Apply music channel volume to master
+  const handleMusicVolumeChange = (value: number) => {
+    setMusicVolume(value);
+    // Scale master volume by music channel
+    const effectiveVolume = Math.round((volume * value) / 100);
+    setGlobalVolume(effectiveVolume);
   };
 
   // Get available Spotify devices
@@ -186,7 +209,7 @@ export const PlaybackBar = () => {
 
         {/* Volume/Queue/Extras */}
         <div className="flex items-center justify-end gap-2">
-          {/* Mic Toggle */}
+          {/* Mic Toggle - Connected to PA System */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -194,16 +217,24 @@ export const PlaybackBar = () => {
                   variant="ghost"
                   size="icon"
                   onClick={handleMicToggle}
-                  className={micEnabled ? "text-red-500" : "text-zinc-400 hover:text-white"}
+                  className={pa.isLive ? "text-red-500 animate-pulse" : "text-zinc-400 hover:text-white"}
                 >
-                  {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                  {pa.isLive ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {micEnabled ? "Disable Microphone" : "Enable Microphone"}
+                {pa.isLive ? "Stop Broadcast (Live)" : "Start Broadcast"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* Live Indicator */}
+          {pa.isLive && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+              <Radio className="h-3 w-3 text-red-500 animate-pulse" />
+              <span className="text-[10px] font-medium text-red-500">LIVE</span>
+            </div>
+          )}
 
           {/* Device Selector */}
           <DropdownMenu>
@@ -256,7 +287,7 @@ export const PlaybackBar = () => {
           {/* Cast Button */}
           <CastButton variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
 
-          {/* Mixer */}
+          {/* Enhanced Mixer */}
           <Popover open={mixerOpen} onOpenChange={setMixerOpen}>
             <TooltipProvider>
               <Tooltip>
@@ -274,47 +305,118 @@ export const PlaybackBar = () => {
                 <TooltipContent>Audio Mixer</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <PopoverContent align="end" className="w-72">
+            <PopoverContent align="end" className="w-80">
               <div className="space-y-4">
-                <h4 className="font-medium text-sm">Audio Mixer</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-16">Master</span>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-sm">Audio Mixer</h4>
+                  {pa.isLive && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-[10px] text-red-500 font-medium">LIVE</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-4">
+                  {/* Master Volume */}
+                  <div className="space-y-2 p-3 rounded-lg bg-secondary/50">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                        <Volume2 className="h-3 w-3" />
+                        Master
+                      </Label>
+                      <span className="text-xs font-medium">{isMuted ? 0 : volume}%</span>
+                    </div>
                     <Slider
                       value={[isMuted ? 0 : volume]}
                       max={100}
                       onValueChange={(v) => setGlobalVolume(v[0])}
-                      className="flex-1"
                     />
-                    <span className="text-xs w-8">{isMuted ? 0 : volume}%</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-16">Music</span>
-                    <Slider
-                      value={[100]}
-                      max={100}
-                      className="flex-1"
-                    />
-                    <span className="text-xs w-8">100%</span>
+                  
+                  {/* Channel Controls */}
+                  <div className="space-y-3">
+                    {/* Music Channel */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                        <Music className="h-4 w-4 text-green-500" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Music</span>
+                          <span className="text-xs text-muted-foreground">{musicVolume}%</span>
+                        </div>
+                        <Slider
+                          value={[musicVolume]}
+                          max={100}
+                          onValueChange={(v) => setMusicVolume(v[0])}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Azan Channel */}
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                        <Volume1 className="h-4 w-4 text-amber-500" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">Azan</span>
+                          <span className="text-xs text-muted-foreground">{azanVolume}%</span>
+                        </div>
+                        <Slider
+                          value={[azanVolume]}
+                          max={100}
+                          onValueChange={(v) => setAzanVolume(v[0])}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* PA/Mic Channel */}
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pa.isLive ? 'bg-red-500/20' : 'bg-zinc-500/20'}`}>
+                        <Mic className={`h-4 w-4 ${pa.isLive ? 'text-red-500' : 'text-zinc-500'}`} />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">PA/Mic</span>
+                          <span className="text-xs text-muted-foreground">{paVolume}%</span>
+                        </div>
+                        <Slider
+                          value={[paVolume]}
+                          max={100}
+                          onValueChange={(v) => setPaVolume(v[0])}
+                          disabled={!pa.isLive}
+                        />
+                        {/* Audio Level Meter */}
+                        {pa.isLive && (
+                          <Progress value={pa.audioLevel} className="h-1 mt-1" />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-16">Azan</span>
-                    <Slider
-                      value={[100]}
-                      max={100}
-                      className="flex-1"
-                    />
-                    <span className="text-xs w-8">100%</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground w-16">PA/Mic</span>
-                    <Slider
-                      value={[micEnabled ? 80 : 0]}
-                      max={100}
-                      className="flex-1"
-                    />
-                    <span className="text-xs w-8">{micEnabled ? 80 : 0}%</span>
-                  </div>
+                </div>
+                
+                {/* Quick Actions */}
+                <div className="pt-2 border-t border-border/50">
+                  <Button
+                    variant={pa.isLive ? "destructive" : "outline"}
+                    size="sm"
+                    className="w-full"
+                    onClick={handleMicToggle}
+                  >
+                    {pa.isLive ? (
+                      <>
+                        <MicOff className="h-4 w-4 mr-2" />
+                        Stop Broadcast
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="h-4 w-4 mr-2" />
+                        Go Live
+                      </>
+                    )}
+                  </Button>
                 </div>
               </div>
             </PopoverContent>
