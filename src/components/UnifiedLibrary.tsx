@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Play, Trash2, Music, Search, Loader2, ListPlus, ListEnd, User, Layers } from "lucide-react";
+import { Play, Trash2, Music, Search, Loader2, ListPlus, ListEnd, User, Layers, Plus, Download, ListMusic, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useUnifiedLibrary, UnifiedTrack } from "@/hooks/useUnifiedLibrary";
+import { useUnifiedLibrary, UnifiedTrack, UnifiedPlaylist } from "@/hooks/useUnifiedLibrary";
 import { useMasterTracks, MasterTrack, Artist } from "@/hooks/useMasterTracks";
 import { LocalUploader } from "@/components/LocalUploader";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -28,6 +28,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -35,7 +38,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MoreHorizontal } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface LocalFolderTrack {
   id: string;
@@ -58,11 +71,23 @@ const ITEM_HEIGHT = 64;
 const OVERSCAN_COUNT = 5;
 
 export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks = [] }: UnifiedLibraryProps) => {
-  const { tracks: dbTracks, isLoading, deleteTrack, loadTracks, fetchMissingArtwork } = useUnifiedLibrary() as any;
+  const { 
+    tracks: dbTracks, 
+    playlists,
+    isLoading, 
+    isImporting,
+    deleteTrack, 
+    loadTracks,
+    loadPlaylists,
+    createPlaylist,
+    deletePlaylist,
+    addTrackToPlaylist,
+    importSpotifyPlaylist,
+    getPlaylistTracks,
+  } = useUnifiedLibrary();
   
   // Convert local folder tracks to UnifiedTrack format and merge with database tracks
   const convertedLocalTracks: UnifiedTrack[] = localFolderTracks.map((lt) => {
-    // Parse duration string "M:SS" or "H:MM:SS" to milliseconds
     const durationParts = lt.duration.split(':').map(Number);
     let durationMs = 0;
     if (durationParts.length === 3) {
@@ -112,6 +137,15 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks
   const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped');
   const [selectedArtist, setSelectedArtist] = useState<Artist | null>(null);
   const [isLoadingArtist, setIsLoadingArtist] = useState(false);
+  const [activeTab, setActiveTab] = useState("tracks");
+  
+  // Playlist state
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [newPlaylistDesc, setNewPlaylistDesc] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<UnifiedPlaylist | null>(null);
+  const [playlistTracks, setPlaylistTracks] = useState<UnifiedTrack[]>([]);
+  const [isLoadingPlaylistTracks, setIsLoadingPlaylistTracks] = useState(false);
   
   // Virtual scrolling state
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -222,6 +256,58 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks
     setIsLoadingArtist(false);
   };
 
+  // Playlist handlers
+  const handleCreatePlaylist = async () => {
+    if (!newPlaylistName.trim()) return;
+    
+    await createPlaylist(newPlaylistName.trim(), newPlaylistDesc.trim() || undefined);
+    setNewPlaylistName("");
+    setNewPlaylistDesc("");
+    setIsCreateDialogOpen(false);
+  };
+
+  const handleImportSpotifyPlaylists = async () => {
+    if (!spotify.isConnected) {
+      toast({ title: "Not connected", description: "Connect to Spotify first", variant: "destructive" });
+      return;
+    }
+    
+    await spotify.loadPlaylists();
+  };
+
+  const handleImportPlaylist = async (spotifyPlaylist: any) => {
+    // Fetch full playlist details with tracks
+    try {
+      const accessToken = spotify.tokens?.accessToken;
+      if (!accessToken) return;
+      
+      toast({ title: "Importing...", description: `Importing "${spotifyPlaylist.name}"` });
+      
+      await importSpotifyPlaylist({
+        id: spotifyPlaylist.id,
+        name: spotifyPlaylist.name,
+        description: spotifyPlaylist.description,
+        images: spotifyPlaylist.images,
+        tracks: spotifyPlaylist.tracks,
+        uri: spotifyPlaylist.uri,
+      });
+    } catch (error) {
+      console.error('Failed to import playlist:', error);
+    }
+  };
+
+  const handleSelectPlaylist = async (playlist: UnifiedPlaylist) => {
+    setSelectedPlaylist(playlist);
+    setIsLoadingPlaylistTracks(true);
+    const tracks = await getPlaylistTracks(playlist.id);
+    setPlaylistTracks(tracks);
+    setIsLoadingPlaylistTracks(false);
+  };
+
+  const handleAddToPlaylist = async (playlistId: string, track: UnifiedTrack) => {
+    await addTrackToPlaylist(playlistId, track.id);
+  };
+
   // Render a flat track row
   const renderTrackRow = (track: UnifiedTrack, index: number) => (
     <div
@@ -286,6 +372,26 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks
           <DropdownMenuItem onClick={() => addTrackToQueue(track, false)}>
             <ListEnd className="h-4 w-4 mr-2" />Add to Queue
           </DropdownMenuItem>
+          {playlists.length > 0 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <ListMusic className="h-4 w-4 mr-2" />Add to Playlist
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {playlists.map((playlist) => (
+                    <DropdownMenuItem 
+                      key={playlist.id} 
+                      onClick={() => handleAddToPlaylist(playlist.id, track)}
+                    >
+                      {playlist.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </>
+          )}
           {track.artist && (
             <>
               <DropdownMenuSeparator />
@@ -496,10 +602,13 @@ return (
         ))}
       </div>
 
-      <Tabs defaultValue="tracks" className="flex-1 min-h-0 flex flex-col">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0 flex flex-col">
         <TabsList className="bg-secondary flex-shrink-0 mb-3">
           <TabsTrigger value="tracks">
             {viewMode === 'grouped' ? 'Master Tracks' : 'All Tracks'}
+          </TabsTrigger>
+          <TabsTrigger value="playlists">
+            Playlists ({playlists.length})
           </TabsTrigger>
           <TabsTrigger value="upload">Upload Local</TabsTrigger>
         </TabsList>
@@ -548,6 +657,209 @@ return (
                 </div>
               </div>
             </div>
+          )}
+        </TabsContent>
+
+        {/* Playlists Tab */}
+        <TabsContent value="playlists" className="flex-1 min-h-0 flex flex-col mt-0 space-y-3">
+          {/* Actions */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Playlist
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Playlist</DialogTitle>
+                  <DialogDescription>
+                    Create a custom playlist to organize your music
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input 
+                      id="name" 
+                      placeholder="My Playlist"
+                      value={newPlaylistName}
+                      onChange={(e) => setNewPlaylistName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="description">Description (optional)</Label>
+                    <Input 
+                      id="description" 
+                      placeholder="A great collection of tracks..."
+                      value={newPlaylistDesc}
+                      onChange={(e) => setNewPlaylistDesc(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleCreatePlaylist} disabled={!newPlaylistName.trim()}>
+                    Create
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {spotify.isConnected && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={isImporting}>
+                    {isImporting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Import from Spotify
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-auto">
+                  {spotify.playlists.length === 0 ? (
+                    <DropdownMenuItem onClick={handleImportSpotifyPlaylists}>
+                      Load Spotify Playlists...
+                    </DropdownMenuItem>
+                  ) : (
+                    spotify.playlists.map((pl: any) => (
+                      <DropdownMenuItem 
+                        key={pl.id} 
+                        onClick={() => handleImportPlaylist(pl)}
+                        className="flex items-center gap-2"
+                      >
+                        <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0 bg-secondary">
+                          {pl.images?.[0]?.url ? (
+                            <img src={pl.images[0].url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <ListMusic className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                        <span className="truncate">{pl.name}</span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
+            {selectedPlaylist && (
+              <Button variant="ghost" size="sm" onClick={() => { setSelectedPlaylist(null); setPlaylistTracks([]); }}>
+                ← Back to Playlists
+              </Button>
+            )}
+          </div>
+
+          {/* Playlist Content */}
+          {selectedPlaylist ? (
+            // Show playlist tracks
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex items-center gap-4 mb-4 p-4 bg-secondary/50 rounded-lg">
+                <div className="w-20 h-20 rounded overflow-hidden bg-secondary flex-shrink-0">
+                  {selectedPlaylist.coverArt ? (
+                    <img src={selectedPlaylist.coverArt} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ListMusic className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl font-bold text-foreground truncate">{selectedPlaylist.name}</h3>
+                  <p className="text-sm text-muted-foreground">{selectedPlaylist.trackCount || 0} tracks</p>
+                  {selectedPlaylist.sourcePlatform && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <SourceIcon source={selectedPlaylist.sourcePlatform as any} size="sm" />
+                      <span className="text-xs text-muted-foreground capitalize">{selectedPlaylist.sourcePlatform}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <ScrollArea className="flex-1">
+                {isLoadingPlaylistTracks ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : playlistTracks.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Music className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">No tracks in this playlist</p>
+                  </div>
+                ) : (
+                  playlistTracks.map((track, idx) => renderTrackRow(track, idx))
+                )}
+              </ScrollArea>
+            </div>
+          ) : (
+            // Show playlist grid
+            <ScrollArea className="flex-1">
+              {playlists.length === 0 ? (
+                <div className="text-center py-12">
+                  <ListMusic className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">No playlists yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    Create a custom playlist or import from Spotify
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {playlists.map((playlist) => (
+                    <div
+                      key={playlist.id}
+                      className="group relative p-3 bg-secondary/50 hover:bg-secondary rounded-lg cursor-pointer transition-colors"
+                      onClick={() => handleSelectPlaylist(playlist)}
+                    >
+                      <div className="relative aspect-square w-full overflow-hidden rounded-md mb-3 bg-secondary">
+                        {playlist.coverArt ? (
+                          <img src={playlist.coverArt} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <ListMusic className="h-12 w-12 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="absolute bottom-2 left-2">
+                          {playlist.sourcePlatform && <SourceIcon source={playlist.sourcePlatform as any} size="sm" />}
+                        </div>
+                      </div>
+                      <h4 className="font-medium text-foreground truncate">{playlist.name}</h4>
+                      <p className="text-sm text-muted-foreground">{playlist.trackCount || 0} tracks</p>
+                      
+                      {/* Delete button */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive bg-background/80"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete playlist?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will delete "{playlist.name}" and remove all track associations. The tracks will remain in your library.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deletePlaylist(playlist.id)}>Delete</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
           )}
         </TabsContent>
 

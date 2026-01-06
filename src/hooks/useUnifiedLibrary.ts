@@ -10,7 +10,7 @@ export interface UnifiedTrack {
   artist: string | null;
   albumArt: string | null;
   source: 'spotify' | 'youtube' | 'local' | 'soundcloud';
-  externalId: string | null; // Spotify URI or YouTube Video ID
+  externalId: string | null;
   localUrl: string | null;
   durationMs: number | null;
   createdAt: string;
@@ -33,6 +33,7 @@ export const useUnifiedLibrary = () => {
   const [playlists, setPlaylists] = useState<UnifiedPlaylist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Load tracks from database
   const loadTracks = useCallback(async () => {
@@ -93,6 +94,239 @@ export const useUnifiedLibrary = () => {
     }
   }, [user]);
 
+  // Create a new custom playlist
+  const createPlaylist = useCallback(async (name: string, description?: string): Promise<UnifiedPlaylist | null> => {
+    if (!user) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('playlists')
+        .insert({
+          user_id: user.id,
+          name,
+          description: description || null,
+          source_platform: 'local',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newPlaylist: UnifiedPlaylist = {
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        coverArt: data.cover_art,
+        sourcePlatform: data.source_platform,
+        externalId: data.external_id,
+        trackCount: 0,
+      };
+
+      setPlaylists(prev => [newPlaylist, ...prev]);
+      toast({ title: "Success", description: `Playlist "${name}" created` });
+      return newPlaylist;
+    } catch (error) {
+      console.error('Failed to create playlist:', error);
+      toast({ title: "Error", description: "Failed to create playlist", variant: "destructive" });
+      return null;
+    }
+  }, [user, toast]);
+
+  // Add track to playlist
+  const addTrackToPlaylist = useCallback(async (playlistId: string, trackId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      // Get current max position
+      const { data: existingTracks } = await supabase
+        .from('playlist_tracks')
+        .select('position')
+        .eq('playlist_id', playlistId)
+        .order('position', { ascending: false })
+        .limit(1);
+
+      const nextPosition = (existingTracks?.[0]?.position ?? -1) + 1;
+
+      const { error } = await supabase
+        .from('playlist_tracks')
+        .insert({
+          playlist_id: playlistId,
+          track_id: trackId,
+          position: nextPosition,
+        });
+
+      if (error) throw error;
+
+      // Update playlist track count locally
+      setPlaylists(prev => prev.map(p => 
+        p.id === playlistId 
+          ? { ...p, trackCount: (p.trackCount || 0) + 1 }
+          : p
+      ));
+
+      toast({ title: "Added", description: "Track added to playlist" });
+      return true;
+    } catch (error) {
+      console.error('Failed to add track to playlist:', error);
+      toast({ title: "Error", description: "Failed to add track to playlist", variant: "destructive" });
+      return false;
+    }
+  }, [user, toast]);
+
+  // Delete playlist
+  const deletePlaylist = useCallback(async (playlistId: string): Promise<boolean> => {
+    if (!user) return false;
+
+    try {
+      // Delete playlist tracks first (cascade should handle this but being explicit)
+      await supabase
+        .from('playlist_tracks')
+        .delete()
+        .eq('playlist_id', playlistId);
+
+      const { error } = await supabase
+        .from('playlists')
+        .delete()
+        .eq('id', playlistId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setPlaylists(prev => prev.filter(p => p.id !== playlistId));
+      toast({ title: "Deleted", description: "Playlist removed" });
+      return true;
+    } catch (error) {
+      console.error('Failed to delete playlist:', error);
+      toast({ title: "Error", description: "Failed to delete playlist", variant: "destructive" });
+      return false;
+    }
+  }, [user, toast]);
+
+  // Import Spotify playlist with tracks
+  const importSpotifyPlaylist = useCallback(async (spotifyPlaylist: {
+    id: string;
+    name: string;
+    description?: string;
+    images?: { url: string }[];
+    tracks?: { items?: { track: any }[] };
+    uri: string;
+  }): Promise<UnifiedPlaylist | null> => {
+    if (!user) return null;
+
+    setIsImporting(true);
+    try {
+      // Check if playlist already imported
+      const { data: existing } = await supabase
+        .from('playlists')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('external_id', spotifyPlaylist.id)
+        .eq('source_platform', 'spotify')
+        .maybeSingle();
+
+      if (existing) {
+        toast({ title: "Already imported", description: `"${spotifyPlaylist.name}" is already in your library` });
+        setIsImporting(false);
+        return null;
+      }
+
+      // Create playlist
+      const { data: playlistData, error: playlistError } = await supabase
+        .from('playlists')
+        .insert({
+          user_id: user.id,
+          name: spotifyPlaylist.name,
+          description: spotifyPlaylist.description || null,
+          cover_art: spotifyPlaylist.images?.[0]?.url || null,
+          source_platform: 'spotify',
+          external_id: spotifyPlaylist.id,
+        })
+        .select()
+        .single();
+
+      if (playlistError) throw playlistError;
+
+      // Import tracks if available
+      const trackItems = spotifyPlaylist.tracks?.items || [];
+      let importedCount = 0;
+
+      for (let i = 0; i < trackItems.length; i++) {
+        const item = trackItems[i];
+        const track = item?.track;
+        if (!track) continue;
+
+        // Check if track already exists
+        const { data: existingTrack } = await supabase
+          .from('tracks')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('external_id', track.uri)
+          .maybeSingle();
+
+        let trackId = existingTrack?.id;
+
+        if (!trackId) {
+          // Add track to library
+          const { data: newTrack, error: trackError } = await supabase
+            .from('tracks')
+            .insert({
+              user_id: user.id,
+              title: track.name,
+              artist: track.artists?.map((a: any) => a.name).join(', ') || null,
+              album_art: track.album?.images?.[0]?.url || null,
+              source: 'spotify',
+              external_id: track.uri,
+              duration_ms: track.duration_ms,
+            })
+            .select()
+            .single();
+
+          if (!trackError && newTrack) {
+            trackId = newTrack.id;
+          }
+        }
+
+        if (trackId) {
+          // Add to playlist
+          await supabase
+            .from('playlist_tracks')
+            .insert({
+              playlist_id: playlistData.id,
+              track_id: trackId,
+              position: i,
+            });
+          importedCount++;
+        }
+      }
+
+      const newPlaylist: UnifiedPlaylist = {
+        id: playlistData.id,
+        name: playlistData.name,
+        description: playlistData.description,
+        coverArt: playlistData.cover_art,
+        sourcePlatform: playlistData.source_platform,
+        externalId: playlistData.external_id,
+        trackCount: importedCount,
+      };
+
+      setPlaylists(prev => [newPlaylist, ...prev]);
+      await loadTracks(); // Refresh tracks list
+      
+      toast({ 
+        title: "Playlist imported", 
+        description: `"${spotifyPlaylist.name}" with ${importedCount} tracks` 
+      });
+      
+      return newPlaylist;
+    } catch (error) {
+      console.error('Failed to import Spotify playlist:', error);
+      toast({ title: "Error", description: "Failed to import playlist", variant: "destructive" });
+      return null;
+    } finally {
+      setIsImporting(false);
+    }
+  }, [user, toast, loadTracks]);
+
   // Add track to library
   const addTrack = useCallback(async (track: Omit<UnifiedTrack, 'id' | 'createdAt'>) => {
     if (!user) return null;
@@ -148,10 +382,8 @@ export const useUnifiedLibrary = () => {
       
       let albumArtUrl: string | null = null;
       
-      // Extract album art if present
       if (metadata.common.picture && metadata.common.picture.length > 0) {
         const picture = metadata.common.picture[0];
-        // Convert Buffer to Uint8Array for Blob compatibility
         const uint8Array = new Uint8Array(picture.data);
         const blob = new Blob([uint8Array], { type: picture.format });
         albumArtUrl = URL.createObjectURL(blob);
@@ -169,7 +401,6 @@ export const useUnifiedLibrary = () => {
       };
     } catch (error) {
       console.error('Failed to extract metadata:', error);
-      // Fallback to filename parsing
       const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
       const parts = nameWithoutExt.split(' - ');
       return {
@@ -181,18 +412,15 @@ export const useUnifiedLibrary = () => {
     }
   }, []);
 
-  // Upload album art to storage and get URL
+  // Upload album art to storage
   const uploadAlbumArt = useCallback(async (blobUrl: string, userId: string, trackFileName: string): Promise<string | null> => {
     try {
-      // Fetch the blob from the object URL
       const response = await fetch(blobUrl);
       const blob = await response.blob();
       
-      // Generate filename
       const ext = blob.type.split('/')[1] || 'jpg';
       const fileName = `${userId}/artwork/${Date.now()}-${trackFileName.replace(/\.[^/.]+$/, "")}.${ext}`;
       
-      // Upload to storage
       const { data, error } = await supabase.storage
         .from('music-files')
         .upload(fileName, blob, {
@@ -202,12 +430,10 @@ export const useUnifiedLibrary = () => {
 
       if (error) throw error;
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('music-files')
         .getPublicUrl(data.path);
 
-      // Revoke the temporary blob URL
       URL.revokeObjectURL(blobUrl);
 
       return urlData.publicUrl;
@@ -217,7 +443,7 @@ export const useUnifiedLibrary = () => {
     }
   }, []);
 
-  // Upload local file to Supabase storage with metadata extraction
+  // Upload local file
   const uploadLocalFile = useCallback(async (file: File): Promise<UnifiedTrack | null> => {
     if (!user) return null;
 
@@ -226,14 +452,10 @@ export const useUnifiedLibrary = () => {
     try {
       setUploadProgress(0);
 
-      // Extract metadata first
-      console.log('Extracting metadata from:', file.name);
       const metadata = await extractMetadata(file);
-      console.log('Extracted metadata:', metadata);
 
       setUploadProgress(20);
 
-      // Upload file to storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('music-files')
         .upload(fileName, file, {
@@ -245,12 +467,10 @@ export const useUnifiedLibrary = () => {
 
       setUploadProgress(60);
 
-      // Get public URL
       const { data: urlData } = supabase.storage
         .from('music-files')
         .getPublicUrl(uploadData.path);
 
-      // Upload album art if extracted
       let permanentAlbumArtUrl: string | null = null;
       if (metadata.albumArt) {
         permanentAlbumArtUrl = await uploadAlbumArt(metadata.albumArt, user.id, file.name);
@@ -258,7 +478,6 @@ export const useUnifiedLibrary = () => {
 
       setUploadProgress(80);
 
-      // If we couldn't get duration from metadata, try with audio element
       let durationMs = metadata.durationMs;
       if (!durationMs) {
         const audio = new Audio(urlData.publicUrl);
@@ -269,14 +488,13 @@ export const useUnifiedLibrary = () => {
               resolve();
             });
             audio.addEventListener('error', reject);
-            setTimeout(resolve, 5000); // Timeout after 5s
+            setTimeout(resolve, 5000);
           });
         } catch {
-          // Couldn't get duration, that's ok
+          // Couldn't get duration
         }
       }
 
-      // Add track to database
       const track = await addTrack({
         title: metadata.title,
         artist: metadata.artist,
@@ -305,13 +523,11 @@ export const useUnifiedLibrary = () => {
     try {
       const track = tracks.find(t => t.id === trackId);
       
-      // Delete from storage if local
       if (track?.source === 'local' && track.localUrl) {
         const path = track.localUrl.split('/music-files/')[1];
         if (path) {
           await supabase.storage.from('music-files').remove([path]);
         }
-        // Also delete album art if it exists
         if (track.albumArt && track.albumArt.includes('/music-files/')) {
           const artPath = track.albumArt.split('/music-files/')[1];
           if (artPath) {
@@ -320,7 +536,6 @@ export const useUnifiedLibrary = () => {
         }
       }
 
-      // Delete from database
       const { error } = await supabase
         .from('tracks')
         .delete()
@@ -339,7 +554,7 @@ export const useUnifiedLibrary = () => {
     }
   }, [user, tracks, toast]);
 
-  // Import Spotify tracks to unified library
+  // Import helpers
   const importSpotifyTrack = useCallback(async (spotifyTrack: {
     id: string;
     name: string;
@@ -359,7 +574,6 @@ export const useUnifiedLibrary = () => {
     });
   }, [addTrack]);
 
-  // Import YouTube video to unified library
   const importYouTubeTrack = useCallback(async (video: {
     id: string;
     title: string;
@@ -378,7 +592,6 @@ export const useUnifiedLibrary = () => {
     });
   }, [addTrack]);
 
-  // Import SoundCloud track to unified library
   const importSoundCloudTrack = useCallback(async (scTrack: {
     id: number;
     title: string;
@@ -397,6 +610,41 @@ export const useUnifiedLibrary = () => {
     });
   }, [addTrack]);
 
+  // Get playlist tracks
+  const getPlaylistTracks = useCallback(async (playlistId: string): Promise<UnifiedTrack[]> => {
+    if (!user) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('playlist_tracks')
+        .select(`
+          position,
+          tracks (*)
+        `)
+        .eq('playlist_id', playlistId)
+        .order('position', { ascending: true });
+
+      if (error) throw error;
+
+      return data
+        .filter((item: any) => item.tracks)
+        .map((item: any) => ({
+          id: item.tracks.id,
+          title: item.tracks.title,
+          artist: item.tracks.artist,
+          albumArt: item.tracks.album_art,
+          source: item.tracks.source as 'spotify' | 'youtube' | 'local' | 'soundcloud',
+          externalId: item.tracks.external_id,
+          localUrl: item.tracks.local_url,
+          durationMs: item.tracks.duration_ms,
+          createdAt: item.tracks.created_at,
+        }));
+    } catch (error) {
+      console.error('Failed to get playlist tracks:', error);
+      return [];
+    }
+  }, [user]);
+
   // Load data on mount
   useEffect(() => {
     if (user) {
@@ -409,6 +657,7 @@ export const useUnifiedLibrary = () => {
     tracks,
     playlists,
     isLoading,
+    isImporting,
     uploadProgress,
     loadTracks,
     loadPlaylists,
@@ -418,5 +667,10 @@ export const useUnifiedLibrary = () => {
     importSpotifyTrack,
     importYouTubeTrack,
     importSoundCloudTrack,
+    createPlaylist,
+    deletePlaylist,
+    addTrackToPlaylist,
+    importSpotifyPlaylist,
+    getPlaylistTracks,
   };
 };
