@@ -17,7 +17,9 @@ import {
   MoreVertical,
   FolderOpen,
   RefreshCw,
-  Loader2
+  Loader2,
+  X,
+  Key
 } from "lucide-react";
 import { Track, Playlist } from "@/hooks/useMediaLibrary";
 import { useState } from "react";
@@ -35,8 +37,12 @@ interface MediaLibraryProps {
   resumeTrack: () => void;
   selectFolder?: () => void;
   rescanFolder?: () => void;
+  clearSavedFolder?: () => void;
+  requestPermissionAndScan?: () => Promise<boolean>;
   isScanning?: boolean;
   folderName?: string | null;
+  hasSavedFolder?: boolean;
+  needsPermission?: boolean;
   isFileSystemSupported?: boolean;
 }
 
@@ -53,8 +59,12 @@ export const MediaLibrary = ({
   resumeTrack,
   selectFolder,
   rescanFolder,
+  clearSavedFolder,
+  requestPermissionAndScan,
   isScanning = false,
   folderName = null,
+  hasSavedFolder = false,
+  needsPermission = false,
   isFileSystemSupported = true,
 }: MediaLibraryProps) => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -175,8 +185,44 @@ export const MediaLibrary = ({
           
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             <TabsContent value="local" className="m-0 space-y-4">
+              {/* Saved Folder Permission Banner */}
+              {isFileSystemSupported && hasSavedFolder && needsPermission && (
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Saved Folder: {folderName}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Grant permission to access your music folder
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={requestPermissionAndScan}
+                      disabled={isScanning}
+                    >
+                      {isScanning ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Key className="h-4 w-4 mr-2" />
+                      )}
+                      Grant Access
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={clearSavedFolder}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Clear
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
               {/* Folder Controls */}
-              {isFileSystemSupported && (
+              {isFileSystemSupported && (!hasSavedFolder || !needsPermission) && (
                 <div className="flex items-center gap-2">
                   <Button 
                     variant="outline" 
@@ -191,18 +237,28 @@ export const MediaLibrary = ({
                     )}
                     {folderName ? "Change Folder" : "Select Folder"}
                   </Button>
-                  {folderName && (
-                    <Button 
-                      variant="outline" 
-                      onClick={rescanFolder}
-                      disabled={isScanning}
-                    >
-                      {isScanning ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                    </Button>
+                  {folderName && !needsPermission && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={rescanFolder}
+                        disabled={isScanning}
+                        title="Rescan for new files"
+                      >
+                        {isScanning ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        onClick={clearSavedFolder}
+                        title="Clear saved folder"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </>
                   )}
                 </div>
               )}

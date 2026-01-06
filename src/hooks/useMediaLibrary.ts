@@ -27,6 +27,66 @@ declare global {
   }
 }
 
+const DB_NAME = 'MusicLibraryDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'folderHandles';
+
+// IndexedDB helpers for persisting folder handle
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+};
+
+const saveFolderHandle = async (handle: FileSystemDirectoryHandle): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.put(handle, 'savedFolder');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+};
+
+const loadFolderHandle = async (): Promise<FileSystemDirectoryHandle | null> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.get('savedFolder');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result || null);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const clearFolderHandle = async (): Promise<void> => {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.delete('savedFolder');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  } catch {
+    // ignore
+  }
+};
+
 const formatDuration = (seconds: number): string => {
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
@@ -79,6 +139,8 @@ export const useMediaLibrary = () => {
   const [volume, setVolume] = useState(75);
   const [isScanning, setIsScanning] = useState(false);
   const [folderName, setFolderName] = useState<string | null>(null);
+  const [hasSavedFolder, setHasSavedFolder] = useState(false);
+  const [needsPermission, setNeedsPermission] = useState(false);
   
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -118,6 +180,22 @@ export const useMediaLibrary = () => {
       revokeObjectUrls();
     };
   }, [toast, revokeObjectUrls]);
+
+  // Load saved folder on mount
+  useEffect(() => {
+    const loadSavedFolder = async () => {
+      if (!isFileSystemSupported) return;
+      
+      const savedHandle = await loadFolderHandle();
+      if (savedHandle) {
+        directoryHandleRef.current = savedHandle;
+        setFolderName(savedHandle.name);
+        setHasSavedFolder(true);
+        setNeedsPermission(true);
+      }
+    };
+    loadSavedFolder();
+  }, []);
 
   // Update volume
   useEffect(() => {
@@ -168,6 +246,50 @@ export const useMediaLibrary = () => {
     return foundTracks;
   }, []);
 
+  // Request permission for saved folder and scan
+  const requestPermissionAndScan = useCallback(async () => {
+    if (!directoryHandleRef.current) return false;
+    
+    try {
+      // Request permission
+      const permissionStatus = await (directoryHandleRef.current as any).requestPermission({ mode: 'read' });
+      
+      if (permissionStatus !== 'granted') {
+        toast({
+          title: "Permission Denied",
+          description: "Please grant access to your music folder",
+          variant: "destructive"
+        });
+        return false;
+      }
+      
+      setNeedsPermission(false);
+      setIsScanning(true);
+      revokeObjectUrls();
+      
+      toast({
+        title: "Scanning folder",
+        description: `Scanning "${directoryHandleRef.current.name}" for audio files...`,
+      });
+      
+      const foundTracks = await scanDirectory(directoryHandleRef.current);
+      setTracks(foundTracks);
+      setIsScanning(false);
+      
+      toast({
+        title: "Scan Complete",
+        description: `Found ${foundTracks.length} audio files`,
+      });
+      
+      return true;
+    } catch (err) {
+      console.error('Permission/scan error:', err);
+      setIsScanning(false);
+      setNeedsPermission(true);
+      return false;
+    }
+  }, [scanDirectory, toast, revokeObjectUrls]);
+
   const selectFolder = useCallback(async () => {
     if (!isFileSystemSupported) {
       toast({
@@ -185,8 +307,13 @@ export const useMediaLibrary = () => {
       
       directoryHandleRef.current = dirHandle;
       setFolderName(dirHandle.name);
+      setHasSavedFolder(true);
+      setNeedsPermission(false);
       setIsScanning(true);
       revokeObjectUrls();
+      
+      // Save the folder handle for persistence
+      await saveFolderHandle(dirHandle);
       
       toast({
         title: "Scanning folder",
@@ -199,8 +326,8 @@ export const useMediaLibrary = () => {
       setIsScanning(false);
       
       toast({
-        title: "Scan Complete",
-        description: `Found ${foundTracks.length} audio files`,
+        title: "Folder Saved",
+        description: `Found ${foundTracks.length} audio files. This folder will be remembered.`,
       });
     } catch (err: any) {
       setIsScanning(false);
@@ -213,7 +340,7 @@ export const useMediaLibrary = () => {
         });
       }
     }
-  }, [scanDirectory, toast]);
+  }, [scanDirectory, toast, revokeObjectUrls]);
 
   const rescanFolder = useCallback(async () => {
     if (!directoryHandleRef.current) {
@@ -225,11 +352,17 @@ export const useMediaLibrary = () => {
       return;
     }
 
+    // Check if we need permission first
+    if (needsPermission) {
+      const granted = await requestPermissionAndScan();
+      if (!granted) return;
+      return;
+    }
+
     setIsScanning(true);
     revokeObjectUrls();
     
     try {
-      // Try to rescan - permission may need to be re-requested
       const foundTracks = await scanDirectory(directoryHandleRef.current);
       setTracks(foundTracks);
       
@@ -239,15 +372,31 @@ export const useMediaLibrary = () => {
       });
     } catch (err) {
       console.error('Rescan error:', err);
+      // Permission might have been revoked
+      setNeedsPermission(true);
       toast({
-        title: "Rescan Failed",
-        description: "Could not rescan folder. Please select it again.",
+        title: "Permission Required",
+        description: "Please grant access to rescan the folder",
         variant: "destructive"
       });
     } finally {
       setIsScanning(false);
     }
-  }, [scanDirectory, toast]);
+  }, [scanDirectory, toast, revokeObjectUrls, needsPermission, requestPermissionAndScan]);
+
+  const clearSavedFolder = useCallback(async () => {
+    await clearFolderHandle();
+    directoryHandleRef.current = null;
+    setFolderName(null);
+    setHasSavedFolder(false);
+    setNeedsPermission(false);
+    revokeObjectUrls();
+    setTracks([]);
+    toast({
+      title: "Folder Cleared",
+      description: "Saved folder has been removed",
+    });
+  }, [toast, revokeObjectUrls]);
 
   const playTrack = useCallback(async (track: Track) => {
     if (!audioRef.current) return;
@@ -314,11 +463,15 @@ export const useMediaLibrary = () => {
     resumeTrack,
     setTracks,
     setPlaylists,
-    // New local library features
+    // Local library features
     selectFolder,
     rescanFolder,
+    clearSavedFolder,
+    requestPermissionAndScan,
     isScanning,
     folderName,
+    hasSavedFolder,
+    needsPermission,
     isFileSystemSupported,
   };
 };
