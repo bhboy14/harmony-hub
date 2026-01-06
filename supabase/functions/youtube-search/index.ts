@@ -13,9 +13,9 @@ serve(async (req) => {
   }
 
   try {
-    // Verify the user is authenticated
+    // Verify the user is authenticated using getClaims
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
+    if (!authHeader?.startsWith('Bearer ')) {
       console.error('No authorization header provided');
       return new Response(
         JSON.stringify({ error: 'Unauthorized', items: [] }),
@@ -29,16 +29,18 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
-    if (authError || !user) {
-      console.error('Authentication failed:', authError?.message);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabaseClient.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      console.error('Authentication failed:', claimsError?.message);
       return new Response(
         JSON.stringify({ error: 'Unauthorized', items: [] }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`YouTube search requested by user: ${user.id}`);
+    const userId = claimsData.claims.sub;
+    console.log(`YouTube search requested by user: ${userId}`);
 
     const { query, maxResults = 10 } = await req.json();
     

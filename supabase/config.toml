@@ -7,7 +7,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.youtube-search]
-verify_jwt = true
+verify_jwt = false
 
 [functions.soundcloud-auth]
 verify_jwt = false
