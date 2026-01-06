@@ -17,7 +17,7 @@ import { UnifiedLibrary } from "@/components/UnifiedLibrary";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary, Track } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler } from "@/hooks/useAzanScheduler";
-import { useSpotify } from "@/contexts/SpotifyContext";
+import { useSpotify, SpotifyContextType } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
