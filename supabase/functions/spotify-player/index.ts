@@ -56,17 +56,27 @@ serve(async (req) => {
         response = await fetch(`${BASE_URL}`, { headers });
         break;
 
-      case "play":
+      case "play": {
         const playBody: any = {};
-        if (uri) playBody.context_uri = uri;
-        if (uris) playBody.uris = uris;
+
+        // Spotify track URIs must be sent as `uris`, not `context_uri`
+        if (Array.isArray(uris) && uris.length > 0) playBody.uris = uris;
+        if (uri) {
+          if (typeof uri === "string" && uri.startsWith("spotify:track:")) {
+            playBody.uris = [uri];
+          } else {
+            playBody.context_uri = uri;
+          }
+        }
         if (position !== undefined) playBody.position_ms = position;
+
         response = await fetch(`${BASE_URL}/play${deviceId ? `?device_id=${deviceId}` : ""}`, {
           method: "PUT",
           headers,
           body: Object.keys(playBody).length > 0 ? JSON.stringify(playBody) : undefined,
         });
         break;
+      }
 
       case "pause":
         response = await fetch(`${BASE_URL}/pause${deviceId ? `?device_id=${deviceId}` : ""}`, {
@@ -130,6 +140,12 @@ serve(async (req) => {
     }
 
     const data = await safeParseResponse(response);
+
+    // Propagate Spotify API errors to the client so UI can show a proper message
+    if (!response.ok) {
+      const message = data?.error?.message || data?.message || `Spotify API error: ${response.status}`;
+      throw new Error(`Player command failed: ${message}`);
+    }
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
