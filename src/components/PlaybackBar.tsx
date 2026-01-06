@@ -3,7 +3,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { usePA } from "@/contexts/PAContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 import { CastButton } from "@/components/CastButton";
 import { 
@@ -108,20 +108,34 @@ export const PlaybackBar = () => {
     pa.setMicVolume(paVolume);
   }, [paVolume, pa]);
 
-  // Apply music channel volume to all audio sources immediately
+  // Debounce ref for Spotify volume
+  const spotifyVolumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Apply music channel volume to all audio sources immediately (local) or debounced (Spotify)
   useEffect(() => {
     const effectiveVolume = isMuted ? 0 : Math.round((volume * musicVolume) / 100);
     const normalizedVolume = effectiveVolume / 100;
     
-    // Apply to local audio
+    // Apply to local audio immediately
     if (unified.localAudioRef?.current) {
       unified.localAudioRef.current.volume = normalizedVolume;
     }
     
-    // Apply to Spotify via their API (debounced to avoid API spam)
+    // Debounce Spotify API calls to avoid 429 rate limit errors
     if (activeSource === 'spotify' && spotify.isConnected) {
-      spotify.setVolume(effectiveVolume).catch(() => {});
+      if (spotifyVolumeTimeoutRef.current) {
+        clearTimeout(spotifyVolumeTimeoutRef.current);
+      }
+      spotifyVolumeTimeoutRef.current = setTimeout(() => {
+        spotify.setVolume(effectiveVolume).catch(() => {});
+      }, 300); // 300ms debounce
     }
+    
+    return () => {
+      if (spotifyVolumeTimeoutRef.current) {
+        clearTimeout(spotifyVolumeTimeoutRef.current);
+      }
+    };
   }, [volume, musicVolume, isMuted, unified.localAudioRef, activeSource, spotify]);
 
   // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
