@@ -184,9 +184,11 @@ export const MusicBrowser = ({ onOpenFullLibrary, localTracks = [] }: MusicBrows
         const activeDevice = devices.find((d: any) => d.is_active);
         const targetDevice = activeDevice || webPlayer || devices[0];
 
-        if (!targetDevice && spotify.activateWebPlayer) {
-          await spotify.activateWebPlayer();
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        // Prefer an actually-active device, otherwise fall back to the Web Playback SDK device id
+        const targetDeviceId = targetDevice?.id || spotify.webPlayerDeviceId;
+
+        if (!targetDeviceId) {
+          throw new Error("No active device found");
         }
 
         const isContext = track.uri.includes(':playlist:') || track.uri.includes(':album:');
@@ -195,7 +197,7 @@ export const MusicBrowser = ({ onOpenFullLibrary, localTracks = [] }: MusicBrows
           body: {
             action: 'play',
             accessToken: spotify.tokens.accessToken,
-            deviceId: targetDevice?.id,
+            deviceId: targetDeviceId,
             ...(isContext ? { uri: track.uri } : { uris: [track.uri] }),
           },
         });

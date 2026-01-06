@@ -409,10 +409,21 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       soundcloudAudioRef.current.currentTime = 0;
     }
     if (youtubePlayerRef.current?.pauseVideo) {
-      youtubePlayerRef.current.pauseVideo();
+      try {
+        youtubePlayerRef.current.pauseVideo();
+      } catch {
+        // YouTube player might not be ready
+      }
     }
+
+    // IMPORTANT: Spotify commands can fail when there's no active device.
+    // Don't let that break switching to local/YouTube/SoundCloud.
     if (spotify.playbackState?.isPlaying) {
-      await spotify.pause();
+      try {
+        await spotify.pause();
+      } catch {
+        // ignore
+      }
     }
   }, [spotify]);
 
@@ -427,15 +438,20 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     if (except !== 'youtube' && youtubePlayerRef.current?.pauseVideo) {
       try {
         const state = youtubePlayerRef.current.getPlayerState?.();
-        if (state === 1) { // Playing
+        if (state === 1) {
           youtubePlayerRef.current.pauseVideo();
         }
-      } catch (e) {
+      } catch {
         // YouTube player might not be ready
       }
     }
+
     if (except !== 'spotify' && spotify.playbackState?.isPlaying) {
-      await spotify.pause();
+      try {
+        await spotify.pause();
+      } catch {
+        // ignore
+      }
     }
   }, [spotify]);
 
