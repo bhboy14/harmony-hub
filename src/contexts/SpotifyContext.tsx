@@ -84,6 +84,7 @@ interface SpotifyContextType {
   loadRecentlyPlayed: () => Promise<void>;
   refreshPlaybackState: () => Promise<void>;
   reinitializePlayer: () => Promise<void>;
+  transferPlayback: (deviceId: string) => Promise<void>;
 }
 
 const SpotifyContext = createContext<SpotifyContextType | null>(null);
@@ -239,6 +240,14 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     [callSpotifyApi],
   );
 
+  const transferPlayback = useCallback(
+    async (deviceId: string) => {
+      await callSpotifyApi("transfer", { deviceId });
+      setTimeout(refreshPlaybackState, 500);
+    },
+    [callSpotifyApi, refreshPlaybackState],
+  );
+
   const initializeWebPlaybackSDK = useCallback(async () => {
     if (!tokens || sdkLoadedRef.current) return;
     const script = document.createElement("script");
@@ -374,6 +383,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     loadRecentlyPlayed,
     refreshPlaybackState,
     reinitializePlayer: async () => {},
+    transferPlayback,
   };
 
   return <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>;

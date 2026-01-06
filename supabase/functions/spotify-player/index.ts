@@ -109,10 +109,20 @@ serve(async (req) => {
       case "search":
         response = await fetch(
           `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type || "track"}&limit=20`,
-          {
-            headers,
-          },
+          { headers },
         );
+        break;
+
+      case "get_playlists":
+        response = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", { headers });
+        break;
+
+      case "get_saved_tracks":
+        response = await fetch("https://api.spotify.com/v1/me/tracks?limit=50", { headers });
+        break;
+
+      case "get_recently_played":
+        response = await fetch(`${BASE_URL}/recently-played?limit=20`, { headers });
         break;
 
       default:

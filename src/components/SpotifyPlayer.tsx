@@ -133,9 +133,9 @@ export const SpotifyPlayer = () => {
         {playbackState?.track ? (
           <div className="p-4 rounded-xl bg-gradient-to-br from-[#1DB954]/20 to-primary/10 border border-[#1DB954]/30 shrink-0">
             <div className="flex gap-4">
-              {playbackState.track.album.images[0] && (
+              {(playbackState.track.albumArt || playbackState.track.album?.images?.[0]?.url) && (
                 <img
-                  src={playbackState.track.album.images[0].url}
+                  src={playbackState.track.albumArt || playbackState.track.album?.images?.[0]?.url}
                   alt="Album art"
                   className="w-20 h-20 rounded-lg shadow-lg object-cover"
                 />
@@ -264,8 +264,8 @@ export const SpotifyPlayer = () => {
                   disabled={!canControl}
                   className="w-full flex items-center gap-3 p-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all"
                 >
-                  {track.album.images[0] ? (
-                    <img src={track.album.images[0].url} alt="" className="w-10 h-10 rounded object-cover" />
+                  {(track.albumArt || track.album?.images?.[0]?.url) ? (
+                    <img src={track.albumArt || track.album?.images?.[0]?.url} alt="" className="w-10 h-10 rounded object-cover" />
                   ) : (
                     <div className="w-10 h-10 rounded bg-secondary flex items-center justify-center">
                       <Music2 className="h-5 w-5 text-muted-foreground" />
