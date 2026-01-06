@@ -539,8 +539,68 @@ export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks
     );
   };
 
-return (
+// Helper to play entire playlist
+  const playPlaylist = useCallback(async (playlist: UnifiedPlaylist) => {
+    const tracks = await getPlaylistTracks(playlist.id);
+    if (tracks.length > 0) {
+      // Play first track and add rest to queue
+      playTrack(tracks[0]);
+      tracks.slice(1).forEach((track) => {
+        const queueTrack = {
+          id: track.id,
+          title: track.title,
+          artist: track.artist || 'Unknown Artist',
+          albumArt: track.albumArt || undefined,
+          duration: track.durationMs || 0,
+          source: track.source as AudioSource,
+          externalId: track.externalId || undefined,
+          url: track.localUrl || undefined,
+        };
+        unifiedAudio.addToQueue(queueTrack);
+      });
+      toast({ title: "Playing playlist", description: `${playlist.name} (${tracks.length} tracks)` });
+    }
+  }, [getPlaylistTracks, playTrack, unifiedAudio, toast]);
+
+  return (
     <div className="flex flex-col h-full min-h-0">
+      {/* Spotify-style Quick Access Grid - Only show if we have playlists */}
+      {playlists.length > 0 && (
+        <div className="flex-shrink-0 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            {playlists.slice(0, 8).map((playlist) => (
+              <div
+                key={playlist.id}
+                className="group flex items-center gap-3 bg-secondary/60 hover:bg-secondary rounded overflow-hidden cursor-pointer transition-colors h-14"
+                onClick={() => { setActiveTab("playlists"); handleSelectPlaylist(playlist); }}
+              >
+                <div className="w-14 h-14 flex-shrink-0 bg-secondary">
+                  {playlist.coverArt ? (
+                    <img src={playlist.coverArt} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-secondary">
+                      <ListMusic className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <span className="font-medium text-foreground text-sm truncate pr-3">{playlist.name}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto mr-2 h-8 w-8 rounded-full bg-primary text-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playPlaylist(playlist);
+                  }}
+                >
+                  <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0 mb-4">
         <div>
