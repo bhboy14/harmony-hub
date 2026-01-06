@@ -53,8 +53,8 @@ export function RecentlyPlayed({ recentTracks = MOCK_RECENT_TRACKS }: RecentlyPl
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">Recently Played</h2>
       </div>
-
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 max-h-[500px] overflow-y-auto scrollbar-hide">
+      /* Changed scrollbar-hide to no-scrollbar to match your index.css */
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 max-h-[500px] overflow-y-auto no-scrollbar">
         {recentTracks.slice(0, 12).map((track) => (
           <Card
             // Fixed: Props are now correctly placed inside the Card component
