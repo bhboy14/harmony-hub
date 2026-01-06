@@ -78,6 +78,7 @@ interface SpotifyContextType {
   next: () => Promise<void>;
   previous: () => Promise<void>;
   setVolume: (volume: number) => Promise<void>;
+  fadeVolume: (targetVolume: number, durationMs: number) => Promise<void>;
   seek: (positionMs: number) => Promise<void>;
   loadPlaylists: () => Promise<void>;
   loadSavedTracks: () => Promise<void>;
@@ -240,6 +241,23 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     [callSpotifyApi],
   );
 
+  const fadeVolume = useCallback(
+    async (targetVolume: number, durationMs: number) => {
+      const currentVolume = playbackState?.volume ?? 100;
+      const steps = Math.max(10, Math.floor(durationMs / 100));
+      const stepDuration = durationMs / steps;
+      const volumeDelta = (targetVolume - currentVolume) / steps;
+
+      for (let i = 1; i <= steps; i++) {
+        const newVolume = Math.round(currentVolume + volumeDelta * i);
+        await callSpotifyApi("volume", { volume: Math.max(0, Math.min(100, newVolume)) });
+        await new Promise((resolve) => setTimeout(resolve, stepDuration));
+      }
+      setPlaybackState((prev) => (prev ? { ...prev, volume: targetVolume } : null));
+    },
+    [callSpotifyApi, playbackState?.volume],
+  );
+
   const transferPlayback = useCallback(
     async (deviceId: string) => {
       await callSpotifyApi("transfer", { deviceId });
@@ -377,6 +395,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     next,
     previous,
     setVolume,
+    fadeVolume,
     seek,
     loadPlaylists,
     loadSavedTracks,
