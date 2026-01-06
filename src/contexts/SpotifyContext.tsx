@@ -132,7 +132,32 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const autoTransferAttemptedRef = useRef(false);
   const { toast } = useToast();
   const { user, session, isLoading: authLoading } = useAuth();
+const seek = async (positionMs: number) => {
+  try {
+    const { data, error } = await supabase.functions.invoke("spotify-player", {
+      body: {
+        action: "seek",
+        accessToken: session?.provider_token, // Ensure you are passing the token
+        position: Math.floor(positionMs), // The 'position' expected by your Edge Function
+        deviceId: playbackState?.device_id,
+      },
+    });
 
+    if (error) throw error;
+    
+    // Optimistically update the local progress state
+    setPlaybackState(prev => prev ? { ...prev, progress: positionMs } : null);
+  } catch (err) {
+    console.error("Error seeking:", err);
+  }
+};
+
+// Make sure to include seek in the value prop
+return (
+  <SpotifyContext.Provider value={{ ..., seek }}>
+    {children}
+  </SpotifyContext.Provider>
+);
   // Load tokens from database on mount or when user changes
   useEffect(() => {
     const loadTokensFromDb = async () => {
