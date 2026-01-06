@@ -37,26 +37,21 @@
 
     --radius: 0.5rem;
 
-    /* Spotify green */
     --spotify-green: 141 76% 48%;
     --spotify-green-hover: 141 76% 55%;
 
-    /* Surface levels */
     --surface-0: 0 0% 0%;
     --surface-1: 0 0% 7%;
     --surface-2: 0 0% 12%;
     --surface-3: 0 0% 18%;
     --surface-elevated: 0 0% 14%;
 
-    /* Gradients */
     --gradient-hero: linear-gradient(180deg, hsl(160 40% 20%) 0%, hsl(0 0% 7%) 100%);
     --gradient-card-hover: linear-gradient(180deg, hsl(0 0% 18%) 0%, hsl(0 0% 12%) 100%);
 
-    /* Shadows */
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
     --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.3);
 
-    /* Sidebar */
     --sidebar-background: 0 0% 0%;
     --sidebar-foreground: 0 0% 70%;
     --sidebar-primary: 141 76% 48%;
@@ -79,7 +74,8 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans antialiased overflow-hidden; /* Added overflow-hidden to prevent double scroll */
+    height: 100vh;
     font-family:
       "Inter",
       -apple-system,
@@ -103,7 +99,6 @@
     background: linear-gradient(180deg, hsl(0 0% 20%) 0%, hsl(0 0% 14%) 100%);
   }
 
-  /* Quick play row cards */
   .quick-play-card {
     @apply flex items-center gap-4 bg-card/60 rounded-md overflow-hidden transition-all;
     @apply hover:bg-card cursor-pointer;
@@ -117,20 +112,18 @@
     @apply opacity-0 translate-y-2 transition-all duration-200;
   }
 
-  /* Glass panel */
   .glass-panel {
     @apply bg-card/80 backdrop-blur-xl border border-border/50 rounded-xl;
     box-shadow: var(--shadow-card);
   }
 
-  /* Section title style */
   .section-title {
     @apply text-2xl font-bold text-foreground;
   }
 
-  /* Scrollbar styling */
+  /* Refined Scrollbar styling - Sleeker and less intrusive */
   .custom-scrollbar::-webkit-scrollbar {
-    width: 12px;
+    width: 6px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
@@ -138,25 +131,29 @@
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: hsl(0 0% 30%);
-    border-radius: 6px;
-    border: 3px solid transparent;
-    background-clip: content-box;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: hsl(0 0% 45%);
-    border: 3px solid transparent;
-    background-clip: content-box;
+    background: rgba(255, 255, 255, 0.2);
   }
 
-  /* Now playing gradient */
   .now-playing-gradient {
     background: linear-gradient(180deg, hsl(var(--primary) / 0.4) 0%, hsl(0 0% 7%) 50%);
   }
 }
 
 @layer utilities {
+  /* Utility to hide scrollbar but keep scrolling */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
@@ -191,18 +188,7 @@
     animation: shimmer 2s infinite;
   }
 
-  /* Spotify green hover */
   .hover-spotify:hover {
     color: hsl(var(--spotify-green));
-@layer utilities {
-  /* ... keep your existing animations ... */
-
-  /* New utility to hide scrollbars */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
   }
 }
