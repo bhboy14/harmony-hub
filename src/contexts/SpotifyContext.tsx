@@ -314,9 +314,66 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   // --- Effects ---
 
+  // Handle OAuth callback from popup window
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "spotify-callback") return;
+
+      const { code, error } = event.data;
+      
+      if (error) {
+        toast({
+          title: "Spotify Connection Failed",
+          description: error,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (code) {
+        try {
+          const { data, error: exchangeError } = await supabase.functions.invoke("spotify-auth", {
+            body: { action: "exchange", code, redirectUri: REDIRECT_URI },
+          });
+
+          if (exchangeError) throw exchangeError;
+
+          const newTokens = {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            expiresAt: Date.now() + data.expires_in * 1000,
+          };
+
+          setTokens(newTokens);
+          await saveTokensToDb(newTokens);
+
+          toast({
+            title: "Spotify Connected",
+            description: "Successfully connected to Spotify!",
+          });
+        } catch (err: any) {
+          console.error("Token exchange failed:", err);
+          toast({
+            title: "Connection Failed",
+            description: err.message || "Failed to connect to Spotify",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [saveTokensToDb, toast]);
+
+  // Load tokens from database on mount
   useEffect(() => {
     const loadTokens = async () => {
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
       const { data } = await supabase.from("spotify_tokens").select("*").eq("user_id", user.id).maybeSingle();
       if (data) {
         setTokens({
