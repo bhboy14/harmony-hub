@@ -74,9 +74,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
 
   const startBroadcast = useCallback(async () => {
     try {
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      
+      // Start mic FIRST for instant response
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -84,6 +82,9 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
         }
       });
       mediaStreamRef.current = stream;
+      
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
       
       const source = audioContext.createMediaStreamSource(stream);
       
@@ -102,21 +103,24 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       analyser.connect(gainNode);
       gainNode.connect(audioContext.destination);
       
-      // Duck ALL audio sources (Spotify, YouTube, Local, SoundCloud)
-      if (autoDuck && (unifiedAudio.isPlaying || unifiedAudio.activeSource)) {
-        try {
-          const state = await unifiedAudio.fadeAllAndPause(musicDuckLevel, fadeOutDuration * 1000);
-          preBroadcastStateRef.current = state;
-        } catch (err) {
-          console.warn('Could not duck audio:', err);
-        }
-      }
-      
+      // Set live state IMMEDIATELY so UI responds
       setIsLive(true);
+      
       toast({
         title: "Broadcast Started",
-        description: "You are now live. All music has been paused.",
+        description: "You are now live!",
       });
+      
+      // Duck audio in BACKGROUND (don't await) so mic starts instantly
+      if (autoDuck && (unifiedAudio.isPlaying || unifiedAudio.activeSource)) {
+        unifiedAudio.fadeAllAndPause(musicDuckLevel, fadeOutDuration * 1000)
+          .then(state => {
+            preBroadcastStateRef.current = state;
+          })
+          .catch(err => {
+            console.warn('Could not duck audio:', err);
+          });
+      }
     } catch (err) {
       console.error("Error starting broadcast:", err);
       toast({
