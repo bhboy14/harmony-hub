@@ -47,6 +47,15 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
 
+// Channel volumes stored in localStorage for persistence
+const loadMixerSettings = () => {
+  try {
+    const saved = localStorage.getItem("mixerSettings");
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return { music: 100, azan: 100, pa: 80 };
+};
+
 export const PlaybackBar = () => {
   const unified = useUnifiedAudio();
   const spotify = useSpotify();
@@ -54,10 +63,11 @@ export const PlaybackBar = () => {
   const [queueOpen, setQueueOpen] = useState(false);
   const [mixerOpen, setMixerOpen] = useState(false);
   
-  // Channel volumes (stored locally, could be moved to context for persistence)
-  const [musicVolume, setMusicVolume] = useState(100);
-  const [azanVolume, setAzanVolume] = useState(100);
-  const [paVolume, setPaVolume] = useState(80);
+  // Channel volumes with localStorage persistence
+  const [mixerSettings, setMixerSettings] = useState(loadMixerSettings);
+  const musicVolume = mixerSettings.music;
+  const azanVolume = mixerSettings.azan;
+  const paVolume = mixerSettings.pa;
 
   const {
     activeSource,
@@ -88,10 +98,25 @@ export const PlaybackBar = () => {
     toggleMute,
   } = unified;
 
+  // Persist mixer settings
+  useEffect(() => {
+    localStorage.setItem("mixerSettings", JSON.stringify(mixerSettings));
+  }, [mixerSettings]);
+
   // Sync PA mic volume with slider
   useEffect(() => {
     pa.setMicVolume(paVolume);
   }, [paVolume, pa]);
+
+  // Apply music channel volume - this controls the effective volume for music sources
+  // The actual audio elements get: (masterVolume * musicChannelVolume / 100)
+  useEffect(() => {
+    const effectiveVolume = isMuted ? 0 : Math.round((volume * musicVolume) / 100);
+    // Apply directly to the audio refs via the unified context's localAudioRef
+    if (unified.localAudioRef?.current) {
+      unified.localAudioRef.current.volume = effectiveVolume / 100;
+    }
+  }, [volume, musicVolume, isMuted, unified.localAudioRef]);
 
   // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
   const normalizeToSeconds = (time: number | undefined) => {
@@ -116,12 +141,23 @@ export const PlaybackBar = () => {
     await pa.toggleBroadcast();
   };
 
-  // Apply music channel volume to master
-  const handleMusicVolumeChange = (value: number) => {
-    setMusicVolume(value);
-    // Scale master volume by music channel
-    const effectiveVolume = Math.round((volume * value) / 100);
-    setGlobalVolume(effectiveVolume);
+  // Update individual channel volumes
+  const setMusicVolume = (value: number) => {
+    setMixerSettings(prev => ({ ...prev, music: value }));
+  };
+
+  const setAzanVolume = (value: number) => {
+    setMixerSettings(prev => ({ ...prev, azan: value }));
+    // Update azan player settings in localStorage directly
+    try {
+      const azanSettings = JSON.parse(localStorage.getItem("azanPlayerSettings") || "{}");
+      azanSettings.volume = value;
+      localStorage.setItem("azanPlayerSettings", JSON.stringify(azanSettings));
+    } catch {}
+  };
+
+  const setPaVolume = (value: number) => {
+    setMixerSettings(prev => ({ ...prev, pa: value }));
   };
 
   // Get available Spotify devices
