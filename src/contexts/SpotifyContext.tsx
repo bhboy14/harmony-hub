@@ -307,12 +307,137 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (webPlayerDeviceId) await transferPlayback(webPlayerDeviceId);
   }, [webPlayerDeviceId, transferPlayback]);
 
+  const initializeWebPlaybackSDK = useCallback(async () => {
+    if (!tokens || sdkLoadedRef.current || playerRef.current) return;
+
+    const accessToken = await ensureValidToken();
+    if (!accessToken) return;
+
+    setIsPlayerConnecting(true);
+
+    // Load SDK script if not already loaded
+    if (!document.getElementById("spotify-sdk")) {
+      const script = document.createElement("script");
+      script.id = "spotify-sdk";
+      script.src = "https://sdk.scdn.co/spotify-player.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      sdkLoadedRef.current = true;
+
+      const player = new window.Spotify.Player({
+        name: "Lovable Web Player",
+        getOAuthToken: async (cb) => {
+          const token = await ensureValidToken();
+          if (token) cb(token);
+        },
+        volume: 0.5,
+      });
+
+      player.addListener("ready", async ({ device_id }: { device_id: string }) => {
+        console.log("Spotify Web Player ready with device ID:", device_id);
+        setWebPlayerDeviceId(device_id);
+        setWebPlayerReady(true);
+        setIsPlayerReady(true);
+        setIsPlayerConnecting(false);
+
+        // Auto-transfer playback to web player
+        if (!autoTransferAttemptedRef.current) {
+          autoTransferAttemptedRef.current = true;
+          try {
+            await callSpotifyApi("transfer", { deviceId: device_id });
+            toast({ title: "Player Ready", description: "Spotify Web Player is now active" });
+          } catch (err) {
+            console.error("Auto-transfer failed:", err);
+          }
+        }
+      });
+
+      player.addListener("not_ready", ({ device_id }: { device_id: string }) => {
+        console.log("Device went offline:", device_id);
+        setWebPlayerReady(false);
+        setIsPlayerReady(false);
+      });
+
+      player.addListener("player_state_changed", (state: any) => {
+        if (!state) return;
+        setPlaybackState({
+          isPlaying: !state.paused,
+          track: state.track_window?.current_track,
+          progress: state.position,
+          volume: 100,
+          device: { id: webPlayerDeviceId || "", name: "Lovable Web Player", type: "Computer" },
+        });
+      });
+
+      player.addListener("initialization_error", ({ message }: { message: string }) => {
+        console.error("SDK init error:", message);
+        setIsPlayerConnecting(false);
+      });
+
+      player.addListener("authentication_error", ({ message }: { message: string }) => {
+        console.error("SDK auth error:", message);
+        setIsPlayerConnecting(false);
+      });
+
+      player.addListener("account_error", ({ message }: { message: string }) => {
+        console.error("SDK account error:", message);
+        toast({
+          title: "Spotify Premium Required",
+          description: "Web playback requires a Spotify Premium account",
+          variant: "destructive",
+        });
+        setIsPlayerConnecting(false);
+      });
+
+      player.connect().then((success: boolean) => {
+        if (success) {
+          console.log("Spotify Web Playback SDK connected");
+          playerRef.current = player;
+        } else {
+          setIsPlayerConnecting(false);
+        }
+      });
+    };
+
+    // If SDK already loaded, trigger manually
+    if (window.Spotify) {
+      window.onSpotifyWebPlaybackSDKReady();
+    }
+  }, [tokens, ensureValidToken, callSpotifyApi, toast, webPlayerDeviceId]);
+
   const reinitializePlayer = useCallback(async () => {
-    // Re-logic for SDK
-    console.log("Reinitializing...");
-  }, []);
+    if (playerRef.current) {
+      playerRef.current.disconnect();
+      playerRef.current = null;
+    }
+    sdkLoadedRef.current = false;
+    autoTransferAttemptedRef.current = false;
+    setWebPlayerReady(false);
+    setWebPlayerDeviceId(null);
+    setIsPlayerReady(false);
+    await initializeWebPlaybackSDK();
+  }, [initializeWebPlaybackSDK]);
 
   // --- Effects ---
+
+  // Initialize Web Playback SDK when tokens are available
+  useEffect(() => {
+    if (tokens && !isPlayerConnecting && !webPlayerReady) {
+      initializeWebPlaybackSDK();
+    }
+  }, [tokens, isPlayerConnecting, webPlayerReady, initializeWebPlaybackSDK]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.disconnect();
+      }
+    };
+  }, []);
 
   // Handle OAuth callback from popup window
   useEffect(() => {
