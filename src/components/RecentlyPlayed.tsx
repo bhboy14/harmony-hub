@@ -9,6 +9,8 @@ interface Track {
   artist: string;
   coverUrl: string;
   playedAt?: string;
+  uri?: string;
+  source?: 'spotify' | 'youtube' | 'local' | 'soundcloud';
 }
 
 // Mock data to ensure the component renders immediately
@@ -45,9 +47,16 @@ const MOCK_RECENT_TRACKS: Track[] = [
 
 interface RecentlyPlayedProps {
   recentTracks?: Track[];
+  onPlayTrack?: (track: Track) => void;
 }
 
-export function RecentlyPlayed({ recentTracks = MOCK_RECENT_TRACKS }: RecentlyPlayedProps) {
+export function RecentlyPlayed({ recentTracks = MOCK_RECENT_TRACKS, onPlayTrack }: RecentlyPlayedProps) {
+  const handleTrackClick = (track: Track) => {
+    if (onPlayTrack) {
+      onPlayTrack(track);
+    }
+  };
+
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between">
@@ -57,14 +66,14 @@ export function RecentlyPlayed({ recentTracks = MOCK_RECENT_TRACKS }: RecentlyPl
       <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 max-h-[500px] overflow-y-auto no-scrollbar">
         {recentTracks.slice(0, 12).map((track) => (
           <Card
-            // Fixed: Props are now correctly placed inside the Card component
             key={`${track.id}-${track.playedAt || "default"}`}
             className="spotify-card group cursor-pointer relative overflow-hidden border-0 bg-zinc-900/50 hover:bg-zinc-900 transition-colors"
+            onClick={() => handleTrackClick(track)}
           >
             <CardContent className="p-4">
               <div className="relative aspect-square overflow-hidden rounded-md">
                 <img
-                  src={track.coverUrl}
+                  src={track.coverUrl || "/placeholder.svg"}
                   alt={track.title}
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />

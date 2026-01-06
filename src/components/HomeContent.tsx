@@ -88,6 +88,41 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       playedAt: new Date(track.playedAt).toISOString(), // Convert timestamp number to ISO string
     }));
 
+  // Handler for playing a recently played track
+  const playRecentTrack = async (track: any) => {
+    if (!spotify.tokens?.accessToken) return;
+    setPlayError(null);
+
+    try {
+      const deviceId = spotify.playbackState?.device?.id;
+      const uri = track.uri;
+
+      if (!uri) {
+        setPlayError("Track URI not available for playback.");
+        return;
+      }
+
+      const { error } = await supabase.functions.invoke("spotify-player", {
+        body: {
+          action: "play",
+          accessToken: spotify.tokens.accessToken,
+          uri: uri,
+          deviceId: deviceId,
+        },
+      });
+
+      if (error) throw error;
+      setTimeout(() => spotify.refreshPlaybackState(), 500);
+    } catch (error: any) {
+      console.error("Failed to play recent track:", error);
+      if (error.message?.includes("No active device")) {
+        setPlayError("No active Spotify device found. Open Spotify on your device and try again.");
+      } else {
+        setPlayError("Failed to start playback. Check your connection.");
+      }
+    }
+  };
+
   const playItem = async (item: QuickPlayItem) => {
     if (!spotify.tokens?.accessToken || !item.uri) return;
     setPlayError(null);
@@ -282,7 +317,7 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
             <History className="w-5 h-5" />
             <h2 className="text-2xl font-bold text-foreground">Recently Played</h2>
           </div>
-          <RecentlyPlayed recentTracks={filteredRecentTracks} />
+          <RecentlyPlayed recentTracks={filteredRecentTracks} onPlayTrack={playRecentTrack} />
         </div>
 
         {/* Spotify Mixes */}
