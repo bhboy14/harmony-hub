@@ -37,17 +37,66 @@ import {
 } from "@/components/ui/tooltip";
 import { MoreHorizontal } from "lucide-react";
 
+interface LocalFolderTrack {
+  id: string;
+  title: string;
+  artist: string;
+  duration: string;
+  source: "local" | "streaming";
+  albumArt?: string;
+  url?: string;
+}
+
 interface UnifiedLibraryProps {
   onOpenSpotify?: () => void;
   onOpenYouTube?: () => void;
+  localFolderTracks?: LocalFolderTrack[];
 }
 
 // Virtual scrolling constants
 const ITEM_HEIGHT = 64;
 const OVERSCAN_COUNT = 5;
 
-export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube }: UnifiedLibraryProps) => {
-  const { tracks, isLoading, deleteTrack, loadTracks, fetchMissingArtwork } = useUnifiedLibrary() as any;
+export const UnifiedLibrary = ({ onOpenSpotify, onOpenYouTube, localFolderTracks = [] }: UnifiedLibraryProps) => {
+  const { tracks: dbTracks, isLoading, deleteTrack, loadTracks, fetchMissingArtwork } = useUnifiedLibrary() as any;
+  
+  // Convert local folder tracks to UnifiedTrack format and merge with database tracks
+  const convertedLocalTracks: UnifiedTrack[] = localFolderTracks.map((lt) => {
+    // Parse duration string "M:SS" or "H:MM:SS" to milliseconds
+    const durationParts = lt.duration.split(':').map(Number);
+    let durationMs = 0;
+    if (durationParts.length === 3) {
+      durationMs = (durationParts[0] * 3600 + durationParts[1] * 60 + durationParts[2]) * 1000;
+    } else if (durationParts.length === 2) {
+      durationMs = (durationParts[0] * 60 + durationParts[1]) * 1000;
+    }
+    
+    return {
+      id: `local-folder-${lt.id}`,
+      title: lt.title,
+      artist: lt.artist || null,
+      albumArt: lt.albumArt || null,
+      source: 'local' as const,
+      externalId: null,
+      localUrl: lt.url || null,
+      durationMs,
+      createdAt: new Date().toISOString(),
+    };
+  });
+  
+  // Merge: database tracks + folder-scanned local tracks (avoid duplicates by title+artist)
+  const tracks: UnifiedTrack[] = [...dbTracks];
+  for (const localTrack of convertedLocalTracks) {
+    const exists = tracks.some(
+      (t) => 
+        t.source === 'local' && 
+        t.title.toLowerCase() === localTrack.title.toLowerCase() &&
+        (t.artist || '').toLowerCase() === (localTrack.artist || '').toLowerCase()
+    );
+    if (!exists) {
+      tracks.push(localTrack);
+    }
+  }
   const { 
     masterTracks, 
     isProcessing, 
@@ -493,8 +542,8 @@ return (
               <div style={{ height: totalHeight, position: 'relative' }}>
                 <div style={{ transform: `translateY(${offsetY}px)` }}>
                   {viewMode === 'grouped' 
-                    ? visibleItems.map((item: MasterTrack, idx: number) => renderMasterTrackRow(item, idx))
-                    : visibleItems.map((item: UnifiedTrack, idx: number) => renderTrackRow(item, idx))
+                    ? (visibleItems as MasterTrack[]).map((item, idx) => renderMasterTrackRow(item, idx))
+                    : (visibleItems as UnifiedTrack[]).map((item, idx) => renderTrackRow(item, idx))
                   }
                 </div>
               </div>
