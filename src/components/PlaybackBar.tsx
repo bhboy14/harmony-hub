@@ -1,10 +1,7 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
-import { usePA } from "@/contexts/PAContext";
-import { useCasting } from "@/contexts/CastingContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 import {
@@ -23,11 +20,9 @@ import {
 } from "lucide-react";
 
 export const PlaybackBar = () => {
-  const { hasPermission } = useAuth();
   const unified = useUnifiedAudio();
   const spotify = useSpotify();
   const [queueOpen, setQueueOpen] = useState(false);
-  const canControl = hasPermission("dj");
 
   const {
     activeSource,
@@ -58,10 +53,10 @@ export const PlaybackBar = () => {
     seek,
   } = unified;
 
-  // FIX: Normalizes any time input (ms or s) to seconds for the UI
+  // FIX: Normalizes Spotify milliseconds vs Local seconds
   const normalizeToSeconds = (time: number | undefined) => {
     if (time === undefined || isNaN(time) || time < 0) return 0;
-    // If time is greater than 36000 (10 hours in seconds), it's likely milliseconds
+    // If time is > 36000 (10 hours), it's definitely milliseconds
     return time > 36000 ? time / 1000 : time;
   };
 
@@ -73,26 +68,21 @@ export const PlaybackBar = () => {
   };
 
   const handleSeek = async (value: number[]) => {
-    if (!canControl) return;
-    // Convert back to milliseconds for Spotify, keep seconds for Local
+    // Convert back to milliseconds for Spotify API, keep seconds for local
     const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
     await seek(seekTarget);
   };
 
-  if (!activeSource && !spotify.isConnected) return null;
-
-  const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 50 ? Volume1 : Volume2;
-
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-white/10 z-[100]">
-      <div className="h-full grid grid-cols-3 items-center px-4">
-        {/* Left: Track Info */}
+    <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-white/10 z-[100] px-4">
+      <div className="h-full grid grid-cols-3 items-center">
+        {/* Track Info */}
         <div className="flex items-center gap-3 min-w-0">
           {currentTrack && (
             <>
               <img
                 src={currentTrack.albumArt || ""}
-                className="w-14 h-14 rounded shadow-lg object-cover bg-secondary"
+                className="w-14 h-14 rounded shadow-lg object-cover bg-zinc-800"
                 alt=""
               />
               <div className="min-w-0">
@@ -103,7 +93,7 @@ export const PlaybackBar = () => {
           )}
         </div>
 
-        {/* Center: Controls & Corrected Progress */}
+        {/* Playback Controls */}
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1">
             <Button
@@ -120,7 +110,7 @@ export const PlaybackBar = () => {
             <Button
               size="icon"
               onClick={() => (isPlaying ? pause() : play())}
-              className="h-8 w-8 rounded-full bg-white text-black hover:scale-105 transition"
+              className="h-8 w-8 rounded-full bg-white text-black"
             >
               {isPlaying ? (
                 <Pause className="h-4 w-4 fill-current" />
@@ -148,14 +138,13 @@ export const PlaybackBar = () => {
               max={normalizeToSeconds(duration) || 100}
               step={1}
               onValueChange={handleSeek}
-              disabled={!canControl}
               className="cursor-pointer"
             />
             <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Right: Volume & Queue */}
+        {/* Volume/Queue */}
         <div className="flex items-center justify-end gap-3">
           <Button
             variant="ghost"
@@ -166,7 +155,7 @@ export const PlaybackBar = () => {
             <ListMusic className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-2 w-32">
-            <VolumeIcon className="h-4 w-4 text-zinc-400" onClick={() => toggleMute()} />
+            <Volume2 className="h-4 w-4 text-zinc-400" />
             <Slider
               value={[isMuted ? 0 : volume]}
               max={100}
