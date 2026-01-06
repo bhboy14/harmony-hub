@@ -1,9 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // --- CONFIGURATION ---
-const SC_CLIENT_ID = "dH1Xed1fpITYonugor6sw39jvdq58M3h";
-const SC_OAUTH_TOKEN = "OAuth 2-310286-92172367-WPpVc4VRL7UmlRO";
+const SC_CLIENT_ID = Deno.env.get("SOUNDCLOUD_CLIENT_ID") || "dH1Xed1fpITYonugor6sw39jvdq58M3h";
+const SC_OAUTH_TOKEN = Deno.env.get("SOUNDCLOUD_OAUTH_TOKEN") || "2-310286-92172367-WPpVc4VRL7UmlRO";
 // ---------------------
 
 const corsHeaders = {
@@ -41,12 +40,13 @@ serve(async (req) => {
     // Use provided token or fallback
     const tokenToUse = accessToken || SC_OAUTH_TOKEN;
 
-    // Headers for V2 API often just need the Client ID appended to the URL,
-    // but we keep OAuth header for V1 endpoints (likes/playlists).
+    // Headers for SoundCloud API - OAuth token format
     const headers = {
       Authorization: `OAuth ${tokenToUse}`,
       Accept: "application/json",
     };
+
+    console.log("Processing action:", action);
 
     let response: Response;
     let data: any;
