@@ -189,7 +189,7 @@ const Index = () => {
         {/* Content + Now Playing - Flex Layout */}
         <div className="flex-1 flex overflow-hidden">
           {/* Main Content */}
-          <main className="flex-1 overflow-auto pb-24 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          <main className="flex-1 overflow-y-auto pb-24 no-scrollbar">
             {activeTab === "dashboard" && <HomeContent onOpenSearch={() => setActiveTab("search")} />}
 
             {activeTab === "search" && (
