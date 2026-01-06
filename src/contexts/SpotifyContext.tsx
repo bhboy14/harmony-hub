@@ -165,7 +165,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshPlaybackState = useCallback(async () => {
     try {
-      const [playback, deviceList] = await Promise.all([callSpotifyApi("get_playback"), callSpotifyApi("get_devices")]);
+      const [playback, deviceList] = await Promise.all([
+        callSpotifyApi("get_playback"),
+        callSpotifyApi("get_devices"),
+      ]);
+
       if (playback) {
         setPlaybackState({
           isPlaying: playback.is_playing,
@@ -175,7 +179,16 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           device: playback.device,
         });
       }
-      setDevices(deviceList?.devices || []);
+
+      const rawDevices: any[] = deviceList?.devices || [];
+      // Collapse duplicate device entries (Spotify can keep old sessions around).
+      const byKey = new Map<string, any>();
+      for (const d of rawDevices) {
+        const key = `${d?.name || ""}|${d?.type || ""}`;
+        const existing = byKey.get(key);
+        if (!existing || d?.is_active) byKey.set(key, d);
+      }
+      setDevices(Array.from(byKey.values()));
     } catch (err) {
       console.error(err);
     }
@@ -203,10 +216,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const play = useCallback(
     async (uri?: string, uris?: string[]) => {
-      await callSpotifyApi("play", { uri, uris, deviceId: webPlayerDeviceId || undefined });
+      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id || undefined;
+      await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
       setTimeout(refreshPlaybackState, 500);
     },
-    [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId],
+    [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id],
   );
 
   const pause = useCallback(async () => {
@@ -267,6 +281,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const initializeWebPlaybackSDK = useCallback(async () => {
     if (!tokens || sdkLoadedRef.current) return;
+
     const script = document.createElement("script");
     script.src = "https://sdk.scdn.co/spotify-player.js";
     script.async = true;
@@ -274,13 +289,21 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     sdkLoadedRef.current = true;
 
     window.onSpotifyWebPlaybackSDKReady = () => {
+      // Prevent creating multiple SDK players in the same session.
+      if (playerRef.current) return;
+
+      let currentDeviceId = "";
       const player = new window.Spotify.Player({
         name: "Harmony Hub Player",
-        getOAuthToken: (cb) => cb(tokens.accessToken),
+        getOAuthToken: async (cb) => {
+          const token = await ensureValidToken();
+          if (token) cb(token);
+        },
         volume: 0.5,
       });
 
       player.addListener("ready", ({ device_id }) => {
+        currentDeviceId = device_id;
         setWebPlayerDeviceId(device_id);
         setWebPlayerReady(true);
         setIsPlayerReady(true);
@@ -293,18 +316,31 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           track: normalizeTrack(state.track_window?.current_track),
           progress: state.position,
           volume: 100,
-          device: { id: webPlayerDeviceId || "", name: "Web Player", type: "Computer" },
+          device: { id: currentDeviceId, name: "Harmony Hub Player", type: "Computer" },
         });
       });
 
-      player.connect();
       playerRef.current = player;
+      player.connect();
     };
-  }, [tokens, webPlayerDeviceId]);
+  }, [tokens, ensureValidToken]);
 
   useEffect(() => {
     if (tokens && !isPlayerConnecting) initializeWebPlaybackSDK();
   }, [tokens, isPlayerConnecting, initializeWebPlaybackSDK]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try {
+        playerRef.current?.disconnect();
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   useEffect(() => {
     const loadTokens = async () => {

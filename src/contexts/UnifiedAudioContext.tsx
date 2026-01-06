@@ -384,13 +384,13 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeSource, spotify.playbackState]);
 
-  // Auto-detect Spotify as active source when it starts playing
+  // NOTE: Don't auto-switch away from local playback based on possibly-stale Spotify state.
+  // Only mark Spotify as active if nothing else is active.
   useEffect(() => {
-    if (spotify.playbackState?.isPlaying && activeSource !== 'spotify') {
-      stopAllSources();
+    if (spotify.playbackState?.isPlaying && activeSource == null) {
       setActiveSourceState('spotify');
     }
-  }, [spotify.playbackState?.isPlaying]);
+  }, [spotify.playbackState?.isPlaying, activeSource]);
 
   // Stop all audio sources with cross-fade
   const stopAllSources = useCallback(async () => {
@@ -951,14 +951,16 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       }
       setDuration(durationMs);
       setProgress(0);
-    } catch (err) {
-      console.error('Play error:', err);
+    } catch (err: any) {
+      const name = err?.name;
+      const message = err?.message || String(err);
+      console.error('Local play error:', { name, message, err });
       toast({
-        title: "Track unavailable, skipping to next",
-        description: "Could not play this track",
+        title: name === 'NotAllowedError' ? "Playback blocked by browser" : "Playback Error",
+        description: name ? `${name}: ${message}` : message,
         variant: "destructive"
       });
-      setTimeout(() => handleAutoNext(), 500);
+      // Don't auto-skip here; a manual play failure should not jump the queue.
     } finally {
       setIsLoading(false);
     }
