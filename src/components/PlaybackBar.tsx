@@ -37,12 +37,10 @@ export const PlaybackBar = () => {
     queueHistory,
   } = unified;
 
-  // FIXED: Reliability check based on source instead of a hardcoded threshold
+  // FIXED: No longer uses a threshold. Explicitly checks if source is Spotify.
   const normalizeToSeconds = (time: number | undefined) => {
     if (time === undefined || isNaN(time) || time < 0) return 0;
-    // Spotify provides milliseconds; YouTube/SoundCloud/Local provide seconds.
-    if (activeSource === "spotify") return time / 1000;
-    return time;
+    return activeSource === "spotify" ? time / 1000 : time;
   };
 
   const formatTime = (time: number | undefined) => {
@@ -53,7 +51,8 @@ export const PlaybackBar = () => {
   };
 
   const handleSeek = async (value: number[]) => {
-    // Convert back to milliseconds ONLY for Spotify API
+    // If Spotify, the API expects milliseconds back.
+    // If not Spotify, it expects seconds back.
     const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
     await seek(seekTarget);
   };
