@@ -47,7 +47,7 @@ interface SpotifyTrack {
   album: { name: string; images: { url: string }[] };
   duration_ms: number;
   uri: string;
-  albumArt?: string; // Guaranteed fallback property
+  albumArt?: string;
 }
 
 interface SpotifyPlaybackState {
@@ -58,7 +58,7 @@ interface SpotifyPlaybackState {
   device: { id: string; name: string; type: string } | null;
 }
 
-interface SpotifyContextType {
+export interface SpotifyContextType {
   isConnected: boolean;
   isLoading: boolean;
   isPlayerReady: boolean;
@@ -108,7 +108,6 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Helper to safely extract images and normalize data
   const normalizeTrack = (track: any): SpotifyTrack => {
     if (!track) return track;
     return {
@@ -170,7 +169,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       if (playback) {
         setPlaybackState({
           isPlaying: playback.is_playing,
-          track: normalizeTrack(playback.item), // Normalize here
+          track: normalizeTrack(playback.item),
           progress: playback.progress_ms,
           volume: playback.device?.volume_percent ?? 100,
           device: playback.device,
@@ -291,7 +290,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         if (!state) return;
         setPlaybackState({
           isPlaying: !state.paused,
-          track: normalizeTrack(state.track_window?.current_track), // Normalize here
+          track: normalizeTrack(state.track_window?.current_track),
           progress: state.position,
           volume: 100,
           device: { id: webPlayerDeviceId || "", name: "Web Player", type: "Computer" },
@@ -325,7 +324,6 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     loadTokens();
   }, [user]);
 
-  // Handle OAuth callback from popup window
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -375,7 +373,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setPlaybackState(null);
   };
 
-  const value = {
+  const value: SpotifyContextType = {
     isConnected: !!tokens,
     isLoading,
     isPlayerReady,
@@ -408,7 +406,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   return <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>;
 };
 
-export const useSpotify = () => {
+export const useSpotify = (): SpotifyContextType => {
   const context = useContext(SpotifyContext);
   if (!context) throw new Error("useSpotify must be used within SpotifyProvider");
   return context;
