@@ -42,7 +42,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 
 const SpotifyIcon = () => (
@@ -51,42 +51,12 @@ const SpotifyIcon = () => (
   </svg>
 );
 
-const getDeviceIcon = (type: string) => {
-  switch (type?.toLowerCase()) {
-    case "computer":
-      return Laptop;
-    case "smartphone":
-      return Smartphone;
-    case "speaker":
-      return Speaker;
-    case "tv":
-      return Tv;
-    default:
-      return MonitorSpeaker;
-  }
-};
-
-const getSourceIcon = (source: string | null) => {
-  switch (source) {
-    case "spotify":
-      return <SpotifyIcon />;
-    case "local":
-      return <HardDrive className="h-4 w-4" />;
-    case "youtube":
-      return <Youtube className="h-4 w-4 text-[#FF0000]" />;
-    default:
-      return <Music className="h-4 w-4" />;
-  }
-};
-
-// ... (previous imports remain the same
 export const PlaybackBar = () => {
   const { hasPermission } = useAuth();
   const unified = useUnifiedAudio();
   const spotify = useSpotify();
   const { isLive, audioLevel, toggleBroadcast } = usePA();
   const casting = useCasting();
-
   const [queueOpen, setQueueOpen] = useState(false);
   const canControl = hasPermission("dj");
 
@@ -98,7 +68,6 @@ export const PlaybackBar = () => {
     duration,
     volume,
     isMuted,
-    isLoading,
     play,
     pause,
     next,
@@ -117,75 +86,35 @@ export const PlaybackBar = () => {
     toggleRepeat,
     setGlobalVolume,
     toggleMute,
+    seek,
   } = unified;
 
-  const {
-    isConnected: spotifyConnected,
-    devices,
-    webPlayerReady,
-    playbackState,
-    transferPlayback,
-    refreshPlaybackState,
-    activateWebPlayer,
-    connect,
-  } = spotify;
+  // Helper: Normalizes any time input (ms or s) to seconds for the UI
+  const normalizeToSeconds = (time: number | undefined) => {
+    if (time === undefined || isNaN(time) || time < 0) return 0;
+    return time > 36000 ? time / 1000 : time;
+  };
 
-  /**
-   * FIXED: Handles both seconds (Local) and milliseconds (Spotify)
-   * Also handles potential undefined values during track transitions
-   */
   const formatTime = (time: number | undefined) => {
-    if (time === undefined || isNaN(time)) return "0:00";
-
-    // If the number is very large, it's likely milliseconds (Spotify)
-    // Otherwise, treat it as seconds (Local/WebAudio)
-    const totalSeconds = time > 100000 ? Math.floor(time / 1000) : Math.floor(time);
-
+    const totalSeconds = Math.floor(normalizeToSeconds(time));
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handlePlayPause = async () => {
-    if (!canControl) return;
-    if (isPlaying) {
-      await pause();
-    } else {
-      await play();
-    }
-  };
-
-  const handleVolumeChange = async (value: number[]) => {
-    if (!canControl) return;
-    await setGlobalVolume(value[0]);
-  };
-
-  const handleToggleMute = async () => {
-    if (!canControl) return;
-    await toggleMute();
-  };
-
   const handleSeek = async (value: number[]) => {
     if (!canControl) return;
-    await unified.seek(value[0]);
+    const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
+    await seek(seekTarget);
   };
 
-  const hasAnySource = activeSource || spotifyConnected;
-
-  if (!hasAnySource) {
+  if (!activeSource && !spotify.isConnected) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50">
-        <div className="h-full flex items-center justify-center gap-4 px-6">
-          <Music className="h-5 w-5 text-muted-foreground" />
-          <p className="text-muted-foreground text-sm">Connect a source to play music</p>
-          <Button
-            onClick={connect}
-            size="sm"
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 rounded-full px-6"
-          >
-            <SpotifyIcon /> Connect Spotify
-          </Button>
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50 flex items-center justify-center gap-4">
+        <Music className="h-5 w-5 text-muted-foreground" />
+        <Button onClick={spotify.connect} size="sm" className="bg-primary rounded-full px-6 gap-2">
+          <SpotifyIcon /> Connect Spotify
+        </Button>
       </div>
     );
   }
@@ -195,64 +124,38 @@ export const PlaybackBar = () => {
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50">
       <div className="h-full grid grid-cols-3 items-center px-4">
-        {/* Left: Track Info */}
         <div className="flex items-center gap-3 min-w-0">
-          {currentTrack ? (
+          {currentTrack && (
             <>
-              {currentTrack.albumArt ? (
-                <img src={currentTrack.albumArt} alt="" className="w-14 h-14 rounded shadow-lg object-cover" />
-              ) : (
-                <div className="w-14 h-14 rounded shadow-lg bg-secondary flex items-center justify-center">
-                  {getSourceIcon(activeSource)}
-                </div>
-              )}
+              <img
+                src={currentTrack.albumArt || ""}
+                className="w-14 h-14 rounded shadow-lg object-cover bg-secondary"
+              />
               <div className="min-w-0">
-                <p className="font-medium text-foreground truncate text-sm hover:underline cursor-pointer">
-                  {currentTrack.title}
-                </p>
-                <p className="text-xs text-muted-foreground truncate hover:underline cursor-pointer">
-                  {currentTrack.artist}
-                </p>
+                <p className="font-medium text-foreground truncate text-sm">{currentTrack.title}</p>
+                <p className="text-xs text-muted-foreground truncate">{currentTrack.artist}</p>
               </div>
             </>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded bg-secondary flex items-center justify-center">
-                <Music className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">No track playing</p>
-              </div>
-            </div>
           )}
         </div>
 
-        {/* Center: Playback Controls */}
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className={`h-8 w-8 ${shuffle ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              disabled={!canControl}
               onClick={toggleShuffle}
+              className={shuffle ? "text-primary" : "text-muted-foreground"}
             >
               <Shuffle className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => canControl && previous()}
-              disabled={!canControl || !activeSource}
-            >
+            <Button variant="ghost" size="icon" onClick={() => previous()}>
               <SkipBack className="h-4 w-4 fill-current" />
             </Button>
             <Button
               size="icon"
-              className="h-8 w-8 rounded-full bg-foreground text-background hover:scale-105 hover:bg-foreground transition-transform"
-              onClick={handlePlayPause}
-              disabled={!canControl || !activeSource}
+              onClick={() => (isPlaying ? pause() : play())}
+              className="h-8 w-8 rounded-full bg-foreground text-background"
             >
               {isPlaying ? (
                 <Pause className="h-4 w-4 fill-current" />
@@ -260,80 +163,64 @@ export const PlaybackBar = () => {
                 <Play className="h-4 w-4 fill-current ml-0.5" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => canControl && next()}
-              disabled={!canControl || !activeSource}
-            >
+            <Button variant="ghost" size="icon" onClick={() => next()}>
               <SkipForward className="h-4 w-4 fill-current" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className={`h-8 w-8 ${repeat !== "off" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              disabled={!canControl}
               onClick={toggleRepeat}
+              className={repeat !== "off" ? "text-primary" : "text-muted-foreground"}
             >
               {repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
             </Button>
           </div>
 
-          {/* Progress Bar */}
           <div className="flex items-center gap-2 w-full max-w-[600px]">
             <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{formatTime(progress)}</span>
-            <div className="flex-1 group">
-              <Slider
-                value={[progress || 0]}
-                max={duration || 100}
-                step={activeSource === "spotify" ? 1000 : 1}
-                onValueChange={handleSeek}
-                disabled={!canControl}
-                className="cursor-pointer"
-              />
-            </div>
+            <Slider
+              value={[normalizeToSeconds(progress)]}
+              max={normalizeToSeconds(duration) || 100}
+              step={1}
+              onValueChange={handleSeek}
+              disabled={!canControl}
+            />
             <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Right: Controls (Mic, Volume, etc.) */}
-        <div className="flex items-center justify-end gap-1">
-          {/* ... existing Right side icons ... */}
-          <div className="flex items-center gap-1 w-32">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={handleToggleMute}
-              disabled={!canControl}
-            >
-              <VolumeIcon className="h-4 w-4" />
-            </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="icon" onClick={() => setQueueOpen(true)} className="relative">
+            <ListMusic className="h-4 w-4" />
+            {queue.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-primary text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                {queue.length}
+              </span>
+            )}
+          </Button>
+          <div className="flex items-center gap-2 w-32">
+            <VolumeIcon className="h-4 w-4 text-muted-foreground" onClick={toggleMute} />
             <Slider
               value={[isMuted ? 0 : volume]}
               max={100}
-              step={1}
-              onValueChange={handleVolumeChange}
-              disabled={!canControl}
+              onValueChange={(v) => setGlobalVolume(v[0])}
               className="w-24"
             />
           </div>
         </div>
       </div>
 
-      {/* Queue Panel */}
       <QueuePanel
         isOpen={queueOpen}
         onOpenChange={setQueueOpen}
         queue={queue}
         currentIndex={currentQueueIndex}
-        upcomingTracks={upcomingTracks} // Added missing prop
-        history={queueHistory} // Added missing prop
-        onPlayTrack={playQueueTrack} // Added missing prop
-        onRemoveTrack={removeFromQueue} // Added missing prop
-        onClearQueue={clearQueue} // Added missing prop
-        onClearUpcoming={clearUpcoming} // Added missing prop
+        upcomingTracks={upcomingTracks}
+        history={queueHistory}
+        onPlayTrack={playQueueTrack}
+        onRemoveTrack={removeFromQueue}
+        onClearQueue={clearQueue}
+        onClearUpcoming={clearUpcoming}
         isPlaying={isPlaying}
       />
     </div>
