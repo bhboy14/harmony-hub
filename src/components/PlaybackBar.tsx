@@ -42,7 +42,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 
 const SpotifyIcon = () => (
@@ -79,6 +79,7 @@ const getSourceIcon = (source: string | null) => {
   }
 };
 
+// ... (previous imports remain the same
 export const PlaybackBar = () => {
   const { hasPermission } = useAuth();
   const unified = useUnifiedAudio();
@@ -97,6 +98,7 @@ export const PlaybackBar = () => {
     duration,
     volume,
     isMuted,
+    isLoading,
     play,
     pause,
     next,
@@ -128,41 +130,62 @@ export const PlaybackBar = () => {
     connect,
   } = spotify;
 
-  // HELPER: Detects if input is ms (Spotify) or s (Local) and returns pretty string
+  /**
+   * FIXED: Handles both seconds (Local) and milliseconds (Spotify)
+   * Also handles potential undefined values during track transitions
+   */
   const formatTime = (time: number | undefined) => {
-    if (time === undefined || isNaN(time) || time < 0) return "0:00";
-    const totalSeconds = time > 36000 ? Math.floor(time / 1000) : Math.floor(time);
+    if (time === undefined || isNaN(time)) return "0:00";
+
+    // If the number is very large, it's likely milliseconds (Spotify)
+    // Otherwise, treat it as seconds (Local/WebAudio)
+    const totalSeconds = time > 100000 ? Math.floor(time / 1000) : Math.floor(time);
+
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // HELPER: Normalizes any time input to seconds for the Slider UI
-  const toSeconds = (time: number | undefined) => {
-    if (!time) return 0;
-    return time > 36000 ? time / 1000 : time;
-  };
-
   const handlePlayPause = async () => {
     if (!canControl) return;
-    isPlaying ? await pause() : await play();
+    if (isPlaying) {
+      await pause();
+    } else {
+      await play();
+    }
+  };
+
+  const handleVolumeChange = async (value: number[]) => {
+    if (!canControl) return;
+    await setGlobalVolume(value[0]);
+  };
+
+  const handleToggleMute = async () => {
+    if (!canControl) return;
+    await toggleMute();
   };
 
   const handleSeek = async (value: number[]) => {
     if (!canControl) return;
-    // If Spotify is active, we must send milliseconds back to the API
-    const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
-    await unified.seek(seekTarget);
+    await unified.seek(value[0]);
   };
 
-  if (!activeSource && !spotifyConnected) {
+  const hasAnySource = activeSource || spotifyConnected;
+
+  if (!hasAnySource) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50 flex items-center justify-center gap-4">
-        <Music className="h-5 w-5 text-muted-foreground" />
-        <p className="text-muted-foreground text-sm">Connect a source to play music</p>
-        <Button onClick={connect} size="sm" className="bg-primary rounded-full px-6 gap-2">
-          <SpotifyIcon /> Connect Spotify
-        </Button>
+      <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-border z-50">
+        <div className="h-full flex items-center justify-center gap-4 px-6">
+          <Music className="h-5 w-5 text-muted-foreground" />
+          <p className="text-muted-foreground text-sm">Connect a source to play music</p>
+          <Button
+            onClick={connect}
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 rounded-full px-6"
+          >
+            <SpotifyIcon /> Connect Spotify
+          </Button>
+        </div>
       </div>
     );
   }
@@ -176,18 +199,31 @@ export const PlaybackBar = () => {
         <div className="flex items-center gap-3 min-w-0">
           {currentTrack ? (
             <>
-              <img
-                src={currentTrack.albumArt || ""}
-                className="w-14 h-14 rounded shadow-lg object-cover bg-secondary"
-                alt=""
-              />
+              {currentTrack.albumArt ? (
+                <img src={currentTrack.albumArt} alt="" className="w-14 h-14 rounded shadow-lg object-cover" />
+              ) : (
+                <div className="w-14 h-14 rounded shadow-lg bg-secondary flex items-center justify-center">
+                  {getSourceIcon(activeSource)}
+                </div>
+              )}
               <div className="min-w-0">
-                <p className="font-medium text-foreground truncate text-sm">{currentTrack.title}</p>
-                <p className="text-xs text-muted-foreground truncate">{currentTrack.artist}</p>
+                <p className="font-medium text-foreground truncate text-sm hover:underline cursor-pointer">
+                  {currentTrack.title}
+                </p>
+                <p className="text-xs text-muted-foreground truncate hover:underline cursor-pointer">
+                  {currentTrack.artist}
+                </p>
               </div>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">No track playing</p>
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded bg-secondary flex items-center justify-center">
+                <Music className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">No track playing</p>
+              </div>
+            </div>
           )}
         </div>
 
@@ -197,18 +233,26 @@ export const PlaybackBar = () => {
             <Button
               variant="ghost"
               size="icon"
+              className={`h-8 w-8 ${shuffle ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              disabled={!canControl}
               onClick={toggleShuffle}
-              className={shuffle ? "text-primary" : "text-muted-foreground"}
             >
               <Shuffle className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => previous()} disabled={!activeSource}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => canControl && previous()}
+              disabled={!canControl || !activeSource}
+            >
               <SkipBack className="h-4 w-4 fill-current" />
             </Button>
             <Button
               size="icon"
+              className="h-8 w-8 rounded-full bg-foreground text-background hover:scale-105 hover:bg-foreground transition-transform"
               onClick={handlePlayPause}
-              className="h-8 w-8 rounded-full bg-foreground text-background"
+              disabled={!canControl || !activeSource}
             >
               {isPlaying ? (
                 <Pause className="h-4 w-4 fill-current" />
@@ -216,60 +260,80 @@ export const PlaybackBar = () => {
                 <Play className="h-4 w-4 fill-current ml-0.5" />
               )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => next()} disabled={!activeSource}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => canControl && next()}
+              disabled={!canControl || !activeSource}
+            >
               <SkipForward className="h-4 w-4 fill-current" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
+              className={`h-8 w-8 ${repeat !== "off" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              disabled={!canControl}
               onClick={toggleRepeat}
-              className={repeat !== "off" ? "text-primary" : "text-muted-foreground"}
             >
               {repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
             </Button>
           </div>
 
+          {/* Progress Bar */}
           <div className="flex items-center gap-2 w-full max-w-[600px]">
             <span className="text-xs text-muted-foreground w-10 text-right tabular-nums">{formatTime(progress)}</span>
-            <Slider
-              value={[toSeconds(progress)]}
-              max={toSeconds(duration) || 100}
-              step={1}
-              onValueChange={handleSeek}
-              disabled={!canControl}
-              className="cursor-pointer"
-            />
+            <div className="flex-1 group">
+              <Slider
+                value={[progress || 0]}
+                max={duration || 100}
+                step={activeSource === "spotify" ? 1000 : 1}
+                onValueChange={handleSeek}
+                disabled={!canControl}
+                className="cursor-pointer"
+              />
+            </div>
             <span className="text-xs text-muted-foreground w-10 tabular-nums">{formatTime(duration)}</span>
           </div>
         </div>
 
-        {/* Right: Tools & Volume */}
-        <div className="flex items-center justify-end gap-2">
-          {isLive && <div className="text-destructive animate-pulse text-xs font-bold mr-2">LIVE</div>}
-          <Button variant="ghost" size="icon" onClick={() => setQueueOpen(true)} className="relative">
-            <ListMusic className="h-4 w-4" />
-            {queue.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
-                {queue.length}
-              </span>
-            )}
-          </Button>
-          <div className="flex items-center gap-2 w-32">
-            <VolumeIcon className="h-4 w-4 text-muted-foreground" onClick={toggleMute} />
+        {/* Right: Controls (Mic, Volume, etc.) */}
+        <div className="flex items-center justify-end gap-1">
+          {/* ... existing Right side icons ... */}
+          <div className="flex items-center gap-1 w-32">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={handleToggleMute}
+              disabled={!canControl}
+            >
+              <VolumeIcon className="h-4 w-4" />
+            </Button>
             <Slider
               value={[isMuted ? 0 : volume]}
               max={100}
-              onValueChange={(v) => setGlobalVolume(v[0])}
+              step={1}
+              onValueChange={handleVolumeChange}
+              disabled={!canControl}
               className="w-24"
             />
           </div>
         </div>
       </div>
+
+      {/* Queue Panel */}
       <QueuePanel
         isOpen={queueOpen}
         onOpenChange={setQueueOpen}
         queue={queue}
         currentIndex={currentQueueIndex}
+        upcomingTracks={upcomingTracks} // Added missing prop
+        history={queueHistory} // Added missing prop
+        onPlayTrack={playQueueTrack} // Added missing prop
+        onRemoveTrack={removeFromQueue} // Added missing prop
+        onClearQueue={clearQueue} // Added missing prop
+        onClearUpcoming={clearUpcoming} // Added missing prop
         isPlaying={isPlaying}
       />
     </div>
