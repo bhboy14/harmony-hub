@@ -94,7 +94,8 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     setPlayError(null);
 
     try {
-      const deviceId = spotify.playbackState?.device?.id;
+      // Use web player device as fallback if no active device
+      const deviceId = spotify.playbackState?.device?.id || spotify.webPlayerDeviceId;
       const uri = track.uri;
 
       if (!uri) {
@@ -102,7 +103,12 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
         return;
       }
 
-      const { error } = await supabase.functions.invoke("spotify-player", {
+      if (!deviceId) {
+        setPlayError("No active Spotify device found. Open Spotify on a device or wait for the web player to connect.");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("spotify-player", {
         body: {
           action: "play",
           accessToken: spotify.tokens.accessToken,
@@ -112,13 +118,18 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error.message || data.error);
+      
       setTimeout(() => spotify.refreshPlaybackState(), 500);
     } catch (error: any) {
       console.error("Failed to play recent track:", error);
-      if (error.message?.includes("No active device")) {
-        setPlayError("No active Spotify device found. Open Spotify on your device and try again.");
+      const msg = error.message || "";
+      if (msg.includes("No active device") || msg.includes("not found")) {
+        setPlayError("No active Spotify device. Open Spotify on your phone/computer, play any song briefly, then try again.");
+      } else if (msg.includes("Premium")) {
+        setPlayError("Spotify Premium is required for playback control.");
       } else {
-        setPlayError("Failed to start playback. Check your connection.");
+        setPlayError(msg || "Failed to start playback.");
       }
     }
   };
@@ -128,9 +139,15 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
     setPlayError(null);
 
     try {
-      const deviceId = spotify.playbackState?.device?.id;
+      // Use web player device as fallback if no active device
+      const deviceId = spotify.playbackState?.device?.id || spotify.webPlayerDeviceId;
 
-      const { error } = await supabase.functions.invoke("spotify-player", {
+      if (!deviceId) {
+        setPlayError("No active Spotify device. Open Spotify on a device or wait for the web player to connect.");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("spotify-player", {
         body: {
           action: "play",
           accessToken: spotify.tokens.accessToken,
@@ -140,13 +157,18 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error.message || data.error);
+      
       setTimeout(() => spotify.refreshPlaybackState(), 500);
     } catch (error: any) {
       console.error("Failed to play:", error);
-      if (error.message?.includes("No active device")) {
-        setPlayError("No active Spotify device found. Open Spotify on your device and try again.");
+      const msg = error.message || "";
+      if (msg.includes("No active device") || msg.includes("not found")) {
+        setPlayError("No active Spotify device. Open Spotify on your phone/computer, play any song briefly, then try again.");
+      } else if (msg.includes("Premium")) {
+        setPlayError("Spotify Premium is required for playback control.");
       } else {
-        setPlayError("Failed to start playback. Check your connection.");
+        setPlayError(msg || "Failed to start playback.");
       }
     }
   };
