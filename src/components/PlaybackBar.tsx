@@ -4,11 +4,49 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useState } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
-import { Play, Pause, SkipBack, SkipForward, Volume2, Repeat, Repeat1, Shuffle, ListMusic } from "lucide-react";
+import { CastButton } from "@/components/CastButton";
+import { 
+  Play, 
+  Pause, 
+  SkipBack, 
+  SkipForward, 
+  Volume2, 
+  VolumeX,
+  Repeat, 
+  Repeat1, 
+  Shuffle, 
+  ListMusic,
+  Mic,
+  MicOff,
+  Monitor,
+  Sliders
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 export const PlaybackBar = () => {
   const unified = useUnifiedAudio();
+  const spotify = useSpotify();
   const [queueOpen, setQueueOpen] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false);
+  const [mixerOpen, setMixerOpen] = useState(false);
 
   const {
     activeSource,
@@ -36,6 +74,7 @@ export const PlaybackBar = () => {
     toggleRepeat,
     setGlobalVolume,
     seek,
+    toggleMute,
   } = unified;
 
   // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
@@ -55,6 +94,23 @@ export const PlaybackBar = () => {
     // Converts back to milliseconds ONLY for Spotify API
     const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
     await seek(seekTarget);
+  };
+
+  const handleMicToggle = () => {
+    setMicEnabled(!micEnabled);
+    // TODO: Integrate with actual microphone/PA system
+  };
+
+  // Get available Spotify devices
+  const spotifyDevices = spotify.devices || [];
+  const activeDevice = spotifyDevices.find(d => d.is_active);
+
+  const handleDeviceSelect = async (deviceId: string) => {
+    try {
+      await spotify.transferPlayback(deviceId);
+    } catch (err) {
+      console.error('Failed to transfer playback:', err);
+    }
   };
 
   return (
@@ -128,8 +184,143 @@ export const PlaybackBar = () => {
           </div>
         </div>
 
-        {/* Volume/Queue */}
-        <div className="flex items-center justify-end gap-3">
+        {/* Volume/Queue/Extras */}
+        <div className="flex items-center justify-end gap-2">
+          {/* Mic Toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleMicToggle}
+                  className={micEnabled ? "text-red-500" : "text-zinc-400 hover:text-white"}
+                >
+                  {micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {micEnabled ? "Disable Microphone" : "Enable Microphone"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Device Selector */}
+          <DropdownMenu>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={activeDevice ? "text-green-500" : "text-zinc-400 hover:text-white"}
+                    >
+                      <Monitor className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {activeDevice ? `Playing on ${activeDevice.name}` : "Select Device"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>Available Devices</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {spotifyDevices.length === 0 ? (
+                <div className="px-2 py-3 text-sm text-muted-foreground text-center">
+                  No devices available
+                </div>
+              ) : (
+                spotifyDevices.map((device) => (
+                  <DropdownMenuItem
+                    key={device.id}
+                    onClick={() => device.id && handleDeviceSelect(device.id)}
+                    className={device.is_active ? "bg-primary/10" : ""}
+                  >
+                    <Monitor className="h-4 w-4 mr-2" />
+                    <div className="flex-1">
+                      <p className="font-medium">{device.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{device.type}</p>
+                    </div>
+                    {device.is_active && (
+                      <span className="text-xs text-green-500">Playing</span>
+                    )}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Cast Button */}
+          <CastButton variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
+
+          {/* Mixer */}
+          <Popover open={mixerOpen} onOpenChange={setMixerOpen}>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-zinc-400 hover:text-white"
+                    >
+                      <Sliders className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Audio Mixer</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <PopoverContent align="end" className="w-72">
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm">Audio Mixer</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-16">Master</span>
+                    <Slider
+                      value={[isMuted ? 0 : volume]}
+                      max={100}
+                      onValueChange={(v) => setGlobalVolume(v[0])}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-8">{isMuted ? 0 : volume}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-16">Music</span>
+                    <Slider
+                      value={[100]}
+                      max={100}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-8">100%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-16">Azan</span>
+                    <Slider
+                      value={[100]}
+                      max={100}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-8">100%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-16">PA/Mic</span>
+                    <Slider
+                      value={[micEnabled ? 80 : 0]}
+                      max={100}
+                      className="flex-1"
+                    />
+                    <span className="text-xs w-8">{micEnabled ? 80 : 0}%</span>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Queue */}
           <Button
             variant="ghost"
             size="icon"
@@ -138,8 +329,21 @@ export const PlaybackBar = () => {
           >
             <ListMusic className="h-4 w-4" />
           </Button>
+
+          {/* Volume */}
           <div className="flex items-center gap-2 w-32">
-            <Volume2 className="h-4 w-4 text-zinc-400" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleMute}
+              className="text-zinc-400 hover:text-white h-8 w-8"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
+            </Button>
             <Slider
               value={[isMuted ? 0 : volume]}
               max={100}

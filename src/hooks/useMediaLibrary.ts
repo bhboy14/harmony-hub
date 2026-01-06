@@ -141,10 +141,14 @@ export const useMediaLibrary = () => {
   const [folderName, setFolderName] = useState<string | null>(null);
   const [hasSavedFolder, setHasSavedFolder] = useState(false);
   const [needsPermission, setNeedsPermission] = useState(false);
+  const [isWatching, setIsWatching] = useState(false);
+  const [newFilesCount, setNewFilesCount] = useState(0);
   
   const { toast } = useToast();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const directoryHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  const watchIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTrackCountRef = useRef<number>(0);
 
   // Object URLs created for local files must be revoked to avoid memory leaks.
   const objectUrlsRef = useRef<string[]>([]);
@@ -398,6 +402,95 @@ export const useMediaLibrary = () => {
     });
   }, [toast, revokeObjectUrls]);
 
+  // File watcher - poll directory for new files
+  const startWatching = useCallback((intervalMs: number = 30000) => {
+    if (!directoryHandleRef.current || needsPermission) return;
+    
+    // Clear any existing interval
+    if (watchIntervalRef.current) {
+      clearInterval(watchIntervalRef.current);
+    }
+    
+    setIsWatching(true);
+    lastTrackCountRef.current = tracks.length;
+    
+    watchIntervalRef.current = setInterval(async () => {
+      if (!directoryHandleRef.current || needsPermission) {
+        stopWatching();
+        return;
+      }
+      
+      try {
+        // Quick count of files without full metadata extraction
+        let fileCount = 0;
+        const countFiles = async (dirHandle: FileSystemDirectoryHandle): Promise<number> => {
+          let count = 0;
+          for await (const [name, entry] of (dirHandle as any).entries()) {
+            if (entry.kind === 'file') {
+              const ext = name.substring(name.lastIndexOf('.')).toLowerCase();
+              if (AUDIO_EXTENSIONS.includes(ext)) {
+                count++;
+              }
+            } else if (entry.kind === 'directory') {
+              count += await countFiles(entry);
+            }
+          }
+          return count;
+        };
+        
+        fileCount = await countFiles(directoryHandleRef.current);
+        
+        const diff = fileCount - lastTrackCountRef.current;
+        if (diff > 0) {
+          setNewFilesCount(diff);
+          toast({
+            title: "New files detected!",
+            description: `${diff} new audio file${diff > 1 ? 's' : ''} found. Click Rescan to update library.`,
+          });
+        } else if (diff < 0) {
+          setNewFilesCount(0);
+          toast({
+            title: "Files removed",
+            description: `${Math.abs(diff)} file${Math.abs(diff) > 1 ? 's were' : ' was'} removed. Click Rescan to update library.`,
+          });
+        }
+        
+        lastTrackCountRef.current = fileCount;
+      } catch (err) {
+        console.error('Watch error:', err);
+        // Permission might have been revoked
+        setNeedsPermission(true);
+        stopWatching();
+      }
+    }, intervalMs);
+  }, [needsPermission, tracks.length, toast]);
+  
+  const stopWatching = useCallback(() => {
+    if (watchIntervalRef.current) {
+      clearInterval(watchIntervalRef.current);
+      watchIntervalRef.current = null;
+    }
+    setIsWatching(false);
+    setNewFilesCount(0);
+  }, []);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (watchIntervalRef.current) {
+        clearInterval(watchIntervalRef.current);
+      }
+    };
+  }, []);
+  
+  // Auto-start watching after successful scan
+  useEffect(() => {
+    if (tracks.length > 0 && !needsPermission && hasSavedFolder && !isWatching) {
+      lastTrackCountRef.current = tracks.length;
+      startWatching();
+    }
+  }, [tracks.length, needsPermission, hasSavedFolder, isWatching, startWatching]);
+
   const playTrack = useCallback(async (track: Track) => {
     if (!audioRef.current) return;
     
@@ -473,5 +566,10 @@ export const useMediaLibrary = () => {
     hasSavedFolder,
     needsPermission,
     isFileSystemSupported,
+    // File watching
+    isWatching,
+    newFilesCount,
+    startWatching,
+    stopWatching,
   };
 };
