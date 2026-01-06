@@ -1,4 +1,5 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
+import { useSpotify } from "@/contexts/SpotifyContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useState } from "react";
@@ -21,6 +22,8 @@ export const PlaybackBar = () => {
     pause,
     next,
     previous,
+    queue,
+    queueHistory,
     currentQueueIndex,
     upcomingTracks,
     shuffle,
@@ -33,11 +36,9 @@ export const PlaybackBar = () => {
     toggleRepeat,
     setGlobalVolume,
     seek,
-    queue,
-    queueHistory,
   } = unified;
 
-  // FIXED: No longer uses a threshold. Explicitly checks if source is Spotify.
+  // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
   const normalizeToSeconds = (time: number | undefined) => {
     if (time === undefined || isNaN(time) || time < 0) return 0;
     return activeSource === "spotify" ? time / 1000 : time;
@@ -51,8 +52,7 @@ export const PlaybackBar = () => {
   };
 
   const handleSeek = async (value: number[]) => {
-    // If Spotify, the API expects milliseconds back.
-    // If not Spotify, it expects seconds back.
+    // Converts back to milliseconds ONLY for Spotify API
     const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
     await seek(seekTarget);
   };
