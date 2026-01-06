@@ -418,12 +418,11 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
 
     // IMPORTANT: Spotify commands can fail when there's no active device.
     // Don't let that break switching to local/YouTube/SoundCloud.
+    // Also, keep this fire-and-forget to avoid blocking user-gesture playback.
     if (spotify.playbackState?.isPlaying) {
-      try {
-        await spotify.pause();
-      } catch {
+      void spotify.pause().catch(() => {
         // ignore
-      }
+      });
     }
   }, [spotify]);
 
@@ -447,11 +446,10 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
 
     if (except !== 'spotify' && spotify.playbackState?.isPlaying) {
-      try {
-        await spotify.pause();
-      } catch {
+      // Fire-and-forget: avoid blocking user-gesture playback for local audio.
+      void spotify.pause().catch(() => {
         // ignore
-      }
+      });
     }
   }, [spotify]);
 
@@ -637,7 +635,8 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     
     // Stop all current playback first (cross-fade)
-    await stopAllSources();
+    // NOTE: don't await here; awaiting can break user-gesture playback (autoplay policies).
+    stopAllSources();
     
     try {
       switch (track.source) {
@@ -918,17 +917,19 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     if (!localAudioRef.current) return;
     
     setIsLoading(true);
-    await pauseAllExcept('local');
+    // Don't await: keeping this synchronous helps prevent autoplay-policy blocks.
+    pauseAllExcept('local');
     
     try {
       localAudioRef.current.pause();
       
       let audioUrl: string;
-      if (track.fileHandle) {
+      // Prefer an already-prepared URL (keeps playback within user-gesture constraints)
+      if (track.url) {
+        audioUrl = track.url;
+      } else if (track.fileHandle) {
         const file = await track.fileHandle.getFile();
         audioUrl = URL.createObjectURL(file);
-      } else if (track.url) {
-        audioUrl = track.url;
       } else {
         throw new Error('No audio source');
       }
@@ -973,7 +974,8 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     if (!soundcloudAudioRef.current) return;
     
     setIsLoading(true);
-    await pauseAllExcept('soundcloud');
+    // Don't await: keeping this synchronous helps prevent autoplay-policy blocks.
+    pauseAllExcept('soundcloud');
     
     try {
       soundcloudAudioRef.current.pause();
