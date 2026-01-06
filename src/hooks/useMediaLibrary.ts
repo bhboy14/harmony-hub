@@ -84,6 +84,19 @@ export const useMediaLibrary = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const directoryHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
+  // Object URLs created for local files must be revoked to avoid memory leaks.
+  const objectUrlsRef = useRef<string[]>([]);
+  const revokeObjectUrls = useCallback(() => {
+    for (const url of objectUrlsRef.current) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+    }
+    objectUrlsRef.current = [];
+  }, []);
+
   // Initialize audio element
   useEffect(() => {
     audioRef.current = new Audio();
@@ -96,14 +109,15 @@ export const useMediaLibrary = () => {
         variant: "destructive"
       });
     });
-    
+
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      revokeObjectUrls();
     };
-  }, [toast]);
+  }, [toast, revokeObjectUrls]);
 
   // Update volume
   useEffect(() => {
@@ -126,6 +140,11 @@ export const useMediaLibrary = () => {
           try {
             const file = await entry.getFile();
             const metadata = await extractMetadata(file);
+
+            // Pre-generate a stable object URL so playback can start immediately on click
+            // (avoids async/await chains that can trip autoplay policies).
+            const url = URL.createObjectURL(file);
+            objectUrlsRef.current.push(url);
             
             foundTracks.push({
               id: `${basePath}/${name}`.replace(/^\//, ''),
@@ -134,6 +153,7 @@ export const useMediaLibrary = () => {
               duration: metadata.duration,
               source: "local",
               fileHandle: entry,
+              url,
             });
           } catch (err) {
             console.error(`Error reading ${name}:`, err);
@@ -166,6 +186,7 @@ export const useMediaLibrary = () => {
       directoryHandleRef.current = dirHandle;
       setFolderName(dirHandle.name);
       setIsScanning(true);
+      revokeObjectUrls();
       
       toast({
         title: "Scanning folder",
@@ -205,6 +226,7 @@ export const useMediaLibrary = () => {
     }
 
     setIsScanning(true);
+    revokeObjectUrls();
     
     try {
       // Try to rescan - permission may need to be re-requested
