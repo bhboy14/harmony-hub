@@ -1,27 +1,12 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
-import { useSpotify } from "@/contexts/SpotifyContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useState } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  Volume1,
-  Repeat,
-  Repeat1,
-  Shuffle,
-  ListMusic,
-  Music,
-} from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, Repeat, Repeat1, Shuffle, ListMusic } from "lucide-react";
 
 export const PlaybackBar = () => {
   const unified = useUnifiedAudio();
-  const spotify = useSpotify();
   const [queueOpen, setQueueOpen] = useState(false);
 
   const {
@@ -36,8 +21,6 @@ export const PlaybackBar = () => {
     pause,
     next,
     previous,
-    queue,
-    queueHistory,
     currentQueueIndex,
     upcomingTracks,
     shuffle,
@@ -49,15 +32,17 @@ export const PlaybackBar = () => {
     toggleShuffle,
     toggleRepeat,
     setGlobalVolume,
-    toggleMute,
     seek,
+    queue,
+    queueHistory,
   } = unified;
 
-  // FIX: Normalizes Spotify milliseconds vs Local seconds
+  // FIXED: Reliability check based on source instead of a hardcoded threshold
   const normalizeToSeconds = (time: number | undefined) => {
     if (time === undefined || isNaN(time) || time < 0) return 0;
-    // If time is > 36000 (10 hours), it's definitely milliseconds
-    return time > 36000 ? time / 1000 : time;
+    // Spotify provides milliseconds; YouTube/SoundCloud/Local provide seconds.
+    if (activeSource === "spotify") return time / 1000;
+    return time;
   };
 
   const formatTime = (time: number | undefined) => {
@@ -68,7 +53,7 @@ export const PlaybackBar = () => {
   };
 
   const handleSeek = async (value: number[]) => {
-    // Convert back to milliseconds for Spotify API, keep seconds for local
+    // Convert back to milliseconds ONLY for Spotify API
     const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
     await seek(seekTarget);
   };
