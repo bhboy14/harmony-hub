@@ -194,5 +194,15 @@
   /* Spotify green hover */
   .hover-spotify:hover {
     color: hsl(var(--spotify-green));
+@layer utilities {
+  /* ... keep your existing animations ... */
+
+  /* New utility to hide scrollbars */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
   }
 }
