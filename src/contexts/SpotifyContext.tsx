@@ -154,8 +154,16 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     async (action: string, params: Record<string, any> = {}) => {
       const accessToken = await ensureValidToken();
       if (!accessToken) throw new Error("Not connected");
+      
+      // Get the current session to include auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+      
       const { data, error } = await supabase.functions.invoke("spotify-player", {
         body: { action, accessToken, ...params },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       return data;
