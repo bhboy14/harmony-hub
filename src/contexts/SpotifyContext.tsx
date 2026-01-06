@@ -180,14 +180,18 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [callSpotifyApi]);
 
+  const loadPlaylists = useCallback(async () => {
+    const data = await callSpotifyApi("get_playlists");
+    setPlaylists(data?.items || []);
+  }, [callSpotifyApi]);
+
   const loadSavedTracks = useCallback(async () => {
     const data = await callSpotifyApi("get_saved_tracks");
-    setSavedTracks(data?.items?.map((i: any) => normalizeTrack(i.track)) || []); // Normalize here
+    setSavedTracks(data?.items?.map((i: any) => normalizeTrack(i.track)) || []);
   }, [callSpotifyApi]);
 
   const loadRecentlyPlayed = useCallback(async () => {
     const data = await callSpotifyApi("get_recently_played");
-    // Normalize nested tracks in recently played
     const items =
       data?.items?.map((i: any) => ({
         ...i,
@@ -293,6 +297,44 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     };
     loadTokens();
   }, [user]);
+
+  // Handle OAuth callback from popup window
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "spotify-callback") return;
+
+      const { code, error } = event.data;
+
+      if (error) {
+        toast({ title: "Spotify Connection Failed", description: error, variant: "destructive" });
+        return;
+      }
+
+      if (code) {
+        try {
+          const { data, error: exchangeError } = await supabase.functions.invoke("spotify-auth", {
+            body: { action: "exchange", code, redirectUri: REDIRECT_URI },
+          });
+          if (exchangeError) throw exchangeError;
+
+          const newTokens = {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            expiresAt: Date.now() + data.expires_in * 1000,
+          };
+          setTokens(newTokens);
+          await saveTokensToDb(newTokens);
+          toast({ title: "Spotify Connected", description: "Successfully connected to Spotify!" });
+        } catch (err: any) {
+          toast({ title: "Connection Failed", description: err.message || "Failed to connect", variant: "destructive" });
+        }
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [saveTokensToDb, toast]);
 
   const connect = useCallback(async () => {
     const { data } = await supabase.functions.invoke("spotify-auth", {
