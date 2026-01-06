@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// --- CONFIGURATION ---
-const SC_CLIENT_ID = Deno.env.get("SOUNDCLOUD_CLIENT_ID") || "dH1Xed1fpITYonugor6sw39jvdq58M3h";
-const SC_OAUTH_TOKEN = Deno.env.get("SOUNDCLOUD_OAUTH_TOKEN") || "2-310286-92172367-WPpVc4VRL7UmlRO";
+// --- MUSIC ASSISTANT APPROACH: Fixed credentials ---
+const SC_CLIENT_ID = "dH1Xed1fpITYonugor6sw39jvdq58M3h";
+const SC_OAUTH_TOKEN = "2-310286-92172367-WPpVc4VRL7UmlRO";
 // ---------------------
 
 const corsHeaders = {
@@ -27,26 +27,17 @@ serve(async (req) => {
   }
 
   try {
-    // --- AUTHENTICATION ---
-    // (Disabled for easier testing, similar to Music Assistant's internal proxy)
-    /* const authHeader = req.headers.get("Authorization");
-    if (!authHeader) { throw new Error("Unauthorized"); }
-    // ... Supabase Auth Logic would go here ...
-    */
+    // Parse Request - no JWT validation needed for Music Assistant approach
+    const body = await req.json();
+    const { action, ...params } = body;
 
-    // Parse Request
-    const { action, accessToken, ...params } = await req.json();
+    console.log("SoundCloud Proxy - Action:", action);
 
-    // Use provided token or fallback
-    const tokenToUse = accessToken || SC_OAUTH_TOKEN;
-
-    // Headers for SoundCloud API - OAuth token format
+    // Headers for SoundCloud V1 API
     const headers = {
-      Authorization: `OAuth ${tokenToUse}`,
+      Authorization: `OAuth ${SC_OAUTH_TOKEN}`,
       Accept: "application/json",
     };
-
-    console.log("Processing action:", action);
 
     let response: Response;
     let data: any;
@@ -68,50 +59,83 @@ serve(async (req) => {
         data = await safeParseResponse(response);
         break;
 
-      // --- V2 ENDPOINT (Music Assistant Approach for Streaming) ---
+      // --- V2 ENDPOINTS (Music Assistant Approach for Streaming) ---
+      case "get_stream_url":
       case "get_stream":
         console.log("Starting V2 Stream Resolution...");
-        const { trackUrl } = params;
-        if (!trackUrl) throw new Error("trackUrl is required");
-
-        // STEP 1: Resolve the Web URL to a Track Object using V2 API
-        // Note: V2 uses 'api-v2.soundcloud.com'
-        const resolveUrl = `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(trackUrl)}&client_id=${SC_CLIENT_ID}`;
-        const resolveResp = await fetch(resolveUrl);
-
-        if (!resolveResp.ok) {
-          throw new Error(`Failed to resolve track: ${resolveResp.statusText}`);
+        const { trackUrl, trackId } = params;
+        
+        // Build the track URL if only trackId is provided
+        const urlToResolve = trackUrl || `https://soundcloud.com/tracks/${trackId}`;
+        
+        if (!urlToResolve && !trackId) {
+          throw new Error("trackUrl or trackId is required");
         }
 
-        const trackData = await resolveResp.json();
+        // For stream by ID, use the V2 API directly
+        if (trackId && !trackUrl) {
+          const trackApiUrl = `https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${SC_CLIENT_ID}`;
+          const trackResp = await fetch(trackApiUrl);
+          
+          if (!trackResp.ok) {
+            throw new Error(`Failed to get track: ${trackResp.statusText}`);
+          }
+          
+          const trackInfo = await trackResp.json();
+          const transcodings = trackInfo.media?.transcodings || [];
+          
+          const streamCandidate =
+            transcodings.find((t: any) => t.format.protocol === "progressive") ||
+            transcodings.find((t: any) => t.format.protocol === "hls") ||
+            transcodings[0];
 
-        // STEP 2: Find the best transcoding (Stream format)
-        // We look for 'progressive' (standard MP3) or 'hls' (streaming)
-        const transcodings = trackData.media?.transcodings || [];
+          if (!streamCandidate) {
+            throw new Error("No streamable URL found");
+          }
 
-        // Priority: Progressive (MP3) -> HLS -> First available
-        const streamCandidate =
-          transcodings.find((t: any) => t.format.protocol === "progressive") ||
-          transcodings.find((t: any) => t.format.protocol === "hls") ||
-          transcodings[0];
+          const streamUrlWithClient = `${streamCandidate.url}?client_id=${SC_CLIENT_ID}`;
+          const finalStreamResp = await fetch(streamUrlWithClient);
+          const finalStreamData = await finalStreamResp.json();
 
-        if (!streamCandidate) {
-          throw new Error("No streamable URL found in track metadata");
+          data = {
+            stream_url: finalStreamData.url,
+            title: trackInfo.title,
+            artwork: trackInfo.artwork_url,
+            duration: trackInfo.duration,
+          };
+        } else {
+          // Resolve from URL
+          const resolveUrl = `https://api-v2.soundcloud.com/resolve?url=${encodeURIComponent(urlToResolve)}&client_id=${SC_CLIENT_ID}`;
+          const resolveResp = await fetch(resolveUrl);
+
+          if (!resolveResp.ok) {
+            throw new Error(`Failed to resolve track: ${resolveResp.statusText}`);
+          }
+
+          const trackData = await resolveResp.json();
+          const transcodings = trackData.media?.transcodings || [];
+
+          const streamCandidate =
+            transcodings.find((t: any) => t.format.protocol === "progressive") ||
+            transcodings.find((t: any) => t.format.protocol === "hls") ||
+            transcodings[0];
+
+          if (!streamCandidate) {
+            throw new Error("No streamable URL found in track metadata");
+          }
+
+          const streamUrlWithClient = `${streamCandidate.url}?client_id=${SC_CLIENT_ID}`;
+          const finalStreamResp = await fetch(streamUrlWithClient);
+          const finalStreamData = await finalStreamResp.json();
+
+          data = {
+            stream_url: finalStreamData.url,
+            streamUrl: finalStreamData.url,
+            title: trackData.title,
+            artwork: trackData.artwork_url,
+            duration: trackData.duration,
+          };
         }
-
-        // STEP 3: Get the final playback URL
-        // The transcoding URL requires the client_id to be attached again
-        const streamUrlWithClient = `${streamCandidate.url}?client_id=${SC_CLIENT_ID}`;
-        const finalStreamResp = await fetch(streamUrlWithClient);
-        const finalStreamData = await finalStreamResp.json();
-
-        // The actual playable link is inside the 'url' property
-        data = {
-          streamUrl: finalStreamData.url,
-          title: trackData.title,
-          artwork: trackData.artwork_url,
-          duration: trackData.duration,
-        };
         break;
 
       default:
