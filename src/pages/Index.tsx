@@ -220,7 +220,7 @@ const Index = () => {
 
                   <div className="flex-1 overflow-hidden">
                     <TabsContent value="unified" className="h-full mt-0 overflow-y-auto no-scrollbar">
-                      <UnifiedLibrary />
+                      <UnifiedLibrary localFolderTracks={mediaLibrary.localTracks} />
                     </TabsContent>
                     <TabsContent value="spotify" className="h-full mt-0 overflow-y-auto no-scrollbar">
                       <SpotifyPlayer />
