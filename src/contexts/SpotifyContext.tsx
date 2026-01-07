@@ -105,6 +105,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
   const sdkLoadedRef = useRef(false);
+  // Track when we're actively changing volume to prevent refresh from overwriting
+  const volumeChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isVolumeChangingRef = useRef(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -179,13 +182,14 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       ]);
 
       if (playback) {
-        setPlaybackState({
+        setPlaybackState((prev) => ({
           isPlaying: playback.is_playing,
           track: normalizeTrack(playback.item),
           progress: playback.progress_ms,
-          volume: playback.device?.volume_percent ?? 100,
+          // Don't overwrite volume if we're actively changing it
+          volume: isVolumeChangingRef.current ? (prev?.volume ?? 100) : (playback.device?.volume_percent ?? 100),
           device: playback.device,
-        });
+        }));
       }
 
       const rawDevices: any[] = deviceList?.devices || [];
@@ -283,8 +287,24 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const setVolume = useCallback(
     async (volume: number) => {
-      await callSpotifyApi("volume", { volume: Math.round(volume) });
+      // Mark that we're actively changing volume
+      isVolumeChangingRef.current = true;
+      
+      // Clear any existing timeout
+      if (volumeChangeTimeoutRef.current) {
+        clearTimeout(volumeChangeTimeoutRef.current);
+      }
+      
+      // Update local state immediately for responsive UI
       setPlaybackState((prev) => (prev ? { ...prev, volume } : null));
+      
+      // Call API
+      await callSpotifyApi("volume", { volume: Math.round(volume) });
+      
+      // Keep the flag active for 2 seconds after the last change to prevent refresh from overwriting
+      volumeChangeTimeoutRef.current = setTimeout(() => {
+        isVolumeChangingRef.current = false;
+      }, 2000);
     },
     [callSpotifyApi],
   );
