@@ -224,7 +224,34 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   const play = useCallback(
     async (uri?: string, uris?: string[]) => {
-      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id || undefined;
+      // Prefer our Web Player, then any active device, then first available device
+      let targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+      
+      // If no device is active, try to get the device list and use the first one
+      if (!targetDeviceId) {
+        try {
+          const deviceList = await callSpotifyApi("get_devices");
+          const availableDevices = deviceList?.devices || [];
+          // Prefer our web player if found, otherwise use the first device
+          const webPlayer = availableDevices.find((d: any) => d.name === "Harmony Hub Player");
+          const firstDevice = availableDevices[0];
+          targetDeviceId = webPlayer?.id || firstDevice?.id;
+          
+          if (targetDeviceId) {
+            // Transfer playback to activate the device
+            await callSpotifyApi("transfer", { deviceId: targetDeviceId });
+            // Wait a bit for transfer to complete
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+        } catch (err) {
+          console.error("Failed to get devices:", err);
+        }
+      }
+      
+      if (!targetDeviceId) {
+        throw new Error("No active Spotify device found. Please open Spotify on a device or refresh the page.");
+      }
+      
       await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
       setTimeout(refreshPlaybackState, 500);
     },
@@ -310,11 +337,29 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         volume: 0.5,
       });
 
-      player.addListener("ready", ({ device_id }) => {
+      player.addListener("ready", async ({ device_id }) => {
+        console.log("Spotify Web Player ready with device ID:", device_id);
         currentDeviceId = device_id;
         setWebPlayerDeviceId(device_id);
         setWebPlayerReady(true);
         setIsPlayerReady(true);
+        
+        // Auto-transfer playback to our web player to ensure it's active
+        try {
+          const accessToken = await ensureValidToken();
+          if (accessToken) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) {
+              await supabase.functions.invoke("spotify-player", {
+                body: { action: "transfer", accessToken, deviceId: device_id },
+                headers: { Authorization: `Bearer ${session.access_token}` },
+              });
+              console.log("Auto-transferred playback to Harmony Hub Player");
+            }
+          }
+        } catch (err) {
+          console.log("Auto-transfer skipped:", err);
+        }
       });
 
       player.addListener("player_state_changed", (state) => {
