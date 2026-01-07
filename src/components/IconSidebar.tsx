@@ -28,8 +28,8 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
 
   // Library nav items now go to dashboard since it's unified
   const libraryNav = [
-    { id: "dashboard", icon: Library, label: "Your Library" },
-    { id: "dashboard", icon: Heart, label: "Liked Songs", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
+    { id: "library", icon: Library, label: "Your Library", action: "dashboard" },
+    { id: "liked", icon: Heart, label: "Liked Songs", action: "dashboard", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
   ];
 
   const specialNav = [
@@ -84,7 +84,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
         {/* Library Navigation */}
         {libraryNav.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = activeTab === item.action;
           return (
             <Tooltip key={item.id}>
               <TooltipTrigger asChild>
@@ -96,7 +96,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
                       ? "bg-secondary text-foreground" 
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   }`}
-                  onClick={() => setActiveTab("dashboard")}
+                  onClick={() => setActiveTab(item.action)}
                 >
                   {item.color ? (
                     <div className={`w-6 h-6 rounded flex items-center justify-center ${item.color}`}>
