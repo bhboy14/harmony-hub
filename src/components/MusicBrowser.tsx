@@ -170,37 +170,15 @@ export const MusicBrowser = ({ onOpenFullLibrary, localTracks = [] }: MusicBrows
   };
 
   const playTrack = async (track: Track) => {
-    if (track.source === 'spotify' && track.uri && spotify.tokens?.accessToken) {
+    if (track.source === 'spotify' && track.uri) {
       try {
-        const devicesResponse = await supabase.functions.invoke('spotify-player', {
-          body: {
-            action: 'get_devices',
-            accessToken: spotify.tokens.accessToken,
-          },
-        });
-
-        const devices = devicesResponse.data?.devices || [];
-        const webPlayer = devices.find((d: any) => d.name?.includes('Web Player'));
-        const activeDevice = devices.find((d: any) => d.is_active);
-        const targetDevice = activeDevice || webPlayer || devices[0];
-
-        // Prefer an actually-active device, otherwise fall back to the Web Playback SDK device id
-        const targetDeviceId = targetDevice?.id || spotify.webPlayerDeviceId;
-
-        if (!targetDeviceId) {
-          throw new Error("No active device found");
-        }
-
         const isContext = track.uri.includes(':playlist:') || track.uri.includes(':album:');
-        
-        await supabase.functions.invoke('spotify-player', {
-          body: {
-            action: 'play',
-            accessToken: spotify.tokens.accessToken,
-            deviceId: targetDeviceId,
-            ...(isContext ? { uri: track.uri } : { uris: [track.uri] }),
-          },
-        });
+        if (isContext) {
+          await spotify.play(track.uri);
+        } else {
+          // Track URI
+          await spotify.play(undefined, [track.uri]);
+        }
         spotify.refreshPlaybackState();
       } catch (error) {
         console.error('Failed to play Spotify track:', error);

@@ -250,17 +250,17 @@ export const PlaybackBar = () => {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 w-full max-w-[600px]">
-            <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">{formatTime(progress)}</span>
-            <Slider
-              value={[normalizeToSeconds(progress)]}
-              max={normalizeToSeconds(duration) || 100}
-              step={1}
-              onValueChange={handleSeek}
-              className="cursor-pointer"
-            />
-            <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
-          </div>
+           <div className="flex items-center gap-2 w-full max-w-[600px]">
+             <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">{formatTime(progress)}</span>
+             <Slider
+               value={[normalizeToSeconds(progress)]}
+               max={normalizeToSeconds(duration) || 100}
+               step={1}
+               onValueCommit={handleSeek}
+               className="cursor-pointer"
+             />
+             <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
+           </div>
         </div>
 
         {/* Volume/Queue/Extras */}
