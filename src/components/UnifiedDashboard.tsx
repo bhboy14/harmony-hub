@@ -133,6 +133,8 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [activeYouTubeVideoId, setActiveYouTubeVideoId] = useState<string | null>(null);
+  const [activeLocalTrack, setActiveLocalTrack] = useState<LocalTrack | null>(null);
   
   // Helper: extract YouTube video ID from URL
   const extractVideoId = (url: string): string | null => {
@@ -150,11 +152,31 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
   const handlePlayYouTubeUrl = () => {
     const videoId = extractVideoId(youtubeUrl);
     if (videoId) {
+      setActiveYouTubeVideoId(videoId);
       unifiedAudio.playYouTubeVideo(videoId, "YouTube Video");
       toast({ title: "Playing YouTube", description: "Video is now playing" });
     } else {
       toast({ title: "Invalid URL", description: "Please enter a valid YouTube URL", variant: "destructive" });
     }
+  };
+
+  const handlePlayYouTubeTrack = (track: SearchTrack) => {
+    if (track.videoId) {
+      setActiveYouTubeVideoId(track.videoId);
+      unifiedAudio.playYouTubeVideo(track.videoId, track.name);
+    }
+  };
+
+  const handlePlayLocalTrack = (track: LocalTrack) => {
+    setActiveLocalTrack(track);
+    unifiedAudio.playLocalTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist || '',
+      duration: track.duration,
+      url: track.url || '',
+      albumArt: track.albumArt || undefined,
+    });
   };
 
   // Merge local folder tracks (from props + mediaLibrary) with DB tracks
@@ -524,22 +546,27 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
             </Button>
           </div>
 
-          {/* Source Filters */}
+        {/* Source Filters */}
           <div className="flex gap-2 flex-wrap">
-            {(["all", "spotify", "youtube", "local", "soundcloud"] as const).map((f) => (
+            {[
+              { key: 'all', label: 'All', icon: null, color: '' },
+              { key: 'spotify', label: 'Spotify', icon: <SpotifyIcon />, color: 'text-[#1DB954]' },
+              { key: 'youtube', label: 'YouTube', icon: <Youtube className="h-4 w-4" />, color: 'text-red-500' },
+              { key: 'local', label: 'Local', icon: <HardDrive className="h-4 w-4" />, color: 'text-amber-500' },
+            ].map((f) => (
               <Button
-                key={f}
-                variant={filter === f ? "default" : "secondary"}
+                key={f.key}
+                variant={filter === f.key ? "default" : "outline"}
                 size="sm"
-                className={`rounded-full h-8 px-4 text-sm capitalize ${
-                  filter === f ? "bg-primary text-primary-foreground" : "bg-secondary/50"
+                className={`rounded-full h-9 px-4 text-sm gap-2 transition-all ${
+                  filter === f.key 
+                    ? "bg-primary text-primary-foreground shadow-md" 
+                    : `bg-secondary/30 border-border/50 hover:bg-secondary/60 ${f.color}`
                 }`}
-                onClick={() => setFilter(f)}
+                onClick={() => setFilter(f.key as any)}
               >
-                {f === 'spotify' && <SpotifyIcon />}
-                {f === 'youtube' && <Youtube className="h-3 w-3 mr-1" />}
-                {f === 'local' && <HardDrive className="h-3 w-3 mr-1" />}
-                <span className="ml-1">{f}</span>
+                {f.icon && <span className={filter === f.key ? '' : f.color}>{f.icon}</span>}
+                {f.label}
               </Button>
             ))}
           </div>
@@ -628,146 +655,219 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
           </div>
         )}
 
-        {/* YouTube Player Section */}
-        <Collapsible open={showYouTubePlayer} onOpenChange={setShowYouTubePlayer}>
-          <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors w-full text-left">
+        {/* YouTube Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-red-500/20 flex items-center justify-center">
               <Youtube className="h-4 w-4 text-red-500" />
-              YouTube Player
-              {showYouTubePlayer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3">
-            <div className="rounded-xl bg-gradient-to-br from-red-500/10 via-red-500/5 to-background border border-red-500/20 p-4 space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Paste YouTube URL or Video ID..."
-                  value={youtubeUrl}
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handlePlayYouTubeUrl()}
-                  className="flex-1"
-                />
-                <Button 
-                  onClick={handlePlayYouTubeUrl}
-                  disabled={!youtubeUrl.trim()}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  <Play className="h-4 w-4 mr-1" /> Play
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Paste a YouTube URL to play audio. Video plays in background for music streaming.
-              </p>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+            <h3 className="text-lg font-semibold">YouTube</h3>
+            {youtubeResults.length > 0 && (
+              <Badge variant="secondary" className="text-xs">{youtubeResults.length} results</Badge>
+            )}
+          </div>
+          
+          {/* URL Input */}
+          <div className="flex gap-2">
+            <Input
+              placeholder="Paste YouTube URL or search above..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handlePlayYouTubeUrl()}
+              className="flex-1 h-10 bg-secondary/30 border-border/50"
+            />
+            <Button 
+              onClick={handlePlayYouTubeUrl}
+              disabled={!youtubeUrl.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white h-10"
+            >
+              <Play className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {/* YouTube Tracks from Search */}
+          {youtubeResults.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {youtubeResults.slice(0, 8).map((track) => (
+                <div
+                  key={track.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                    activeYouTubeVideoId === track.videoId 
+                      ? 'bg-red-500/20 border border-red-500/40 ring-1 ring-red-500/20' 
+                      : 'bg-card/40 hover:bg-card/70 border border-transparent'
+                  }`}
+                  onClick={() => handlePlayYouTubeTrack(track)}
+                >
+                  <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                    {track.albumArt ? (
+                      <img src={track.albumArt} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-red-500/20 flex items-center justify-center">
+                        <Youtube className="h-5 w-5 text-red-500" />
+                      </div>
+                    )}
+                    {activeYouTubeVideoId === track.videoId && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Volume2 className="h-5 w-5 text-white animate-pulse" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{track.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {/* Embedded YouTube Player */}
+          {activeYouTubeVideoId && (
+            <div className="rounded-xl overflow-hidden border border-red-500/30 bg-black">
+              <div className="aspect-video">
+                <iframe
+                  src={`https://www.youtube.com/embed/${activeYouTubeVideoId}?autoplay=1`}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          )}
+        </div>
 
-        {/* Local Folder Scanner Section */}
-        <Collapsible open={showLocalFolder} onOpenChange={setShowLocalFolder}>
-          <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors w-full text-left">
-              <FolderOpen className="h-4 w-4 text-amber-500" />
-              Local Music Folder
-              {mediaLibrary.folderName && (
-                <Badge variant="secondary" className="ml-2 text-xs">
-                  {mediaLibrary.folderName}
-                </Badge>
-              )}
-              {showLocalFolder ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
-            </button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3">
-            <div className="rounded-xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-background border border-amber-500/20 p-4 space-y-4">
-              {/* Folder Selection */}
-              <div className="flex flex-wrap gap-2">
+        {/* Local Music Section */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <HardDrive className="h-4 w-4 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-semibold">Local Music</h3>
+            {mediaLibrary.folderName && (
+              <Badge variant="secondary" className="text-xs">{mediaLibrary.folderName}</Badge>
+            )}
+            {mediaLibrary.tracks.length > 0 && (
+              <Badge variant="outline" className="text-xs">{mediaLibrary.tracks.length} tracks</Badge>
+            )}
+          </div>
+          
+          {/* Folder Selection */}
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={mediaLibrary.selectFolder}
+              disabled={mediaLibrary.isScanning}
+              variant="outline"
+              size="sm"
+              className="border-amber-500/30 hover:bg-amber-500/10 text-amber-600"
+            >
+              <FolderOpen className="h-4 w-4 mr-2" />
+              {mediaLibrary.folderName ? "Change" : "Select Folder"}
+            </Button>
+            
+            {mediaLibrary.folderName && (
+              <>
                 <Button 
-                  onClick={mediaLibrary.selectFolder}
+                  onClick={mediaLibrary.needsPermission ? mediaLibrary.requestPermissionAndScan : mediaLibrary.rescanFolder}
                   disabled={mediaLibrary.isScanning}
                   variant="outline"
+                  size="sm"
                   className="border-amber-500/30 hover:bg-amber-500/10"
                 >
-                  <FolderOpen className="h-4 w-4 mr-2" />
-                  {mediaLibrary.folderName ? "Change Folder" : "Select Folder"}
+                  {mediaLibrary.isScanning ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  {mediaLibrary.needsPermission ? "Grant Access" : "Rescan"}
                 </Button>
-                
-                {mediaLibrary.folderName && (
-                  <>
-                    <Button 
-                      onClick={mediaLibrary.needsPermission ? mediaLibrary.requestPermissionAndScan : mediaLibrary.rescanFolder}
-                      disabled={mediaLibrary.isScanning}
-                      variant="outline"
-                      className="border-amber-500/30 hover:bg-amber-500/10"
-                    >
-                      {mediaLibrary.isScanning ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                      )}
-                      {mediaLibrary.needsPermission ? "Grant Access" : "Rescan"}
-                    </Button>
-                    <Button 
-                      onClick={mediaLibrary.clearSavedFolder}
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive"
-                    >
-                      Clear
-                    </Button>
-                  </>
+                <Button 
+                  onClick={mediaLibrary.clearSavedFolder}
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Clear
+                </Button>
+              </>
+            )}
+            
+            {mediaLibrary.isWatching && (
+              <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
+                <Eye className="h-3 w-3 mr-1" /> Watching
+              </Badge>
+            )}
+          </div>
+          
+          {/* Local Tracks Grid */}
+          {mediaLibrary.tracks.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {mediaLibrary.tracks.slice(0, 12).map((track) => (
+                <div
+                  key={track.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
+                    activeLocalTrack?.id === track.id 
+                      ? 'bg-amber-500/20 border border-amber-500/40 ring-1 ring-amber-500/20' 
+                      : 'bg-card/40 hover:bg-card/70 border border-transparent'
+                  }`}
+                  onClick={() => handlePlayLocalTrack(track)}
+                >
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                    {track.albumArt ? (
+                      <img src={track.albumArt} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-amber-500/20 flex items-center justify-center">
+                        <Music className="h-5 w-5 text-amber-500" />
+                      </div>
+                    )}
+                    {activeLocalTrack?.id === track.id && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Volume2 className="h-4 w-4 text-white animate-pulse" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{track.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{track.artist || 'Unknown'}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground hidden sm:block">{track.duration}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {mediaLibrary.tracks.length > 12 && (
+            <Button variant="ghost" size="sm" className="w-full text-muted-foreground">
+              Show all {mediaLibrary.tracks.length} tracks
+            </Button>
+          )}
+          
+          {/* Now Playing Local Track */}
+          {activeLocalTrack && (
+            <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-transparent p-4 flex items-center gap-4">
+              <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+                {activeLocalTrack.albumArt ? (
+                  <img src={activeLocalTrack.albumArt} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-amber-500/20 flex items-center justify-center">
+                    <Music className="h-6 w-6 text-amber-500" />
+                  </div>
                 )}
               </div>
-
-              {/* Folder Status */}
-              {mediaLibrary.folderName && (
-                <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                  <HardDrive className="h-4 w-4" />
-                  <span>{mediaLibrary.tracks.length} tracks in <strong>{mediaLibrary.folderName}</strong></span>
-                  {mediaLibrary.isWatching && (
-                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
-                      <Eye className="h-3 w-3 mr-1" /> Watching
-                    </Badge>
-                  )}
-                </div>
-              )}
-
-              {/* Folder Tracks Preview */}
-              {mediaLibrary.tracks.length > 0 && (
-                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
-                  {mediaLibrary.tracks.slice(0, 10).map((track) => (
-                    <div
-                      key={track.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer transition-all group"
-                      onClick={() => mediaLibrary.playTrack(track)}
-                    >
-                      <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center">
-                        <Music className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{track.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{track.duration}</span>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
-                        <Play className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                  {mediaLibrary.tracks.length > 10 && (
-                    <p className="text-xs text-muted-foreground text-center py-2">
-                      +{mediaLibrary.tracks.length - 10} more tracks
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!mediaLibrary.folderName && (
-                <p className="text-xs text-muted-foreground">
-                  Select a folder containing your music files (MP3, WAV, FLAC, M4A, etc.)
-                </p>
-              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold truncate">{activeLocalTrack.title}</p>
+                <p className="text-sm text-muted-foreground truncate">{activeLocalTrack.artist || 'Unknown Artist'}</p>
+                <p className="text-xs text-amber-500 mt-1">Now Playing</p>
+              </div>
+              <Volume2 className="h-5 w-5 text-amber-500 animate-pulse" />
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          )}
+          
+          {!mediaLibrary.folderName && (
+            <p className="text-sm text-muted-foreground">
+              Select a folder to scan for music files (MP3, WAV, FLAC, M4A, etc.)
+            </p>
+          )}
+        </div>
 
         {/* Connect Spotify Banner */}
         {!spotify.isConnected && (
@@ -950,12 +1050,10 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       </div>
 
       {/* Right Sidebar - Popular Songs */}
-      <div className="w-80 flex-shrink-0 border-l border-border/30 hidden lg:block bg-background/50">
-        <ScrollArea className="h-full">
-          <div className="p-4">
-            <PopularSongs title="Popular Songs" />
-          </div>
-        </ScrollArea>
+      <div className="w-64 xl:w-72 flex-shrink-0 border-l border-border/30 hidden lg:block bg-background/50 overflow-y-auto">
+        <div className="p-3">
+          <PopularSongs title="Popular" />
+        </div>
       </div>
 
       {/* Create Playlist Dialog */}

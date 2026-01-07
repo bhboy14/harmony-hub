@@ -68,33 +68,35 @@ export const PopularSongs = ({ title = "Popular Songs" }: PopularSongsProps) => 
   }
 
   return (
-    <div className="bg-secondary/30 rounded-xl border border-border/50 overflow-hidden">
-      <div className="p-4 border-b border-border/50">
+    <div className="bg-card/50 rounded-xl border border-border/30 overflow-hidden">
+      <div className="p-3 border-b border-border/30">
         <div className="flex items-center gap-2">
-          <Music className="h-4 w-4 text-primary" />
-          <h3 className="font-semibold text-foreground">{title}</h3>
+          <div className="h-6 w-6 rounded bg-primary/20 flex items-center justify-center">
+            <Music className="h-3 w-3 text-primary" />
+          </div>
+          <h3 className="font-semibold text-sm text-foreground">{title}</h3>
         </div>
       </div>
       
-      <ScrollArea className="h-[280px]">
-        <div className="p-2 space-y-1">
+      <ScrollArea className="h-auto max-h-[60vh]">
+        <div className="p-2 space-y-0.5">
           {tracks.length > 0 ? (
             tracks.map((track, index) => (
               <div
                 key={track.id}
-                className="group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer transition-all"
+                className="group flex items-center gap-2 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer transition-all"
                 onClick={() => handlePlay(track)}
               >
                 {/* Index / Play button */}
-                <div className="w-6 flex items-center justify-center">
-                  <span className="text-sm text-muted-foreground group-hover:hidden">
+                <div className="w-5 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs text-muted-foreground group-hover:hidden">
                     {index + 1}
                   </span>
-                  <Play className="h-4 w-4 hidden group-hover:block text-foreground" />
+                  <Play className="h-3 w-3 hidden group-hover:block text-primary" />
                 </div>
                 
                 {/* Album Art */}
-                <div className="w-10 h-10 rounded overflow-hidden bg-secondary flex-shrink-0">
+                <div className="w-9 h-9 rounded overflow-hidden bg-secondary flex-shrink-0">
                   {track.albumArt ? (
                     <img 
                       src={track.albumArt} 
@@ -110,28 +112,20 @@ export const PopularSongs = ({ title = "Popular Songs" }: PopularSongsProps) => 
                 
                 {/* Track Info */}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-foreground truncate">
+                  <p className="font-medium text-xs text-foreground truncate leading-tight">
                     {track.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-[10px] text-muted-foreground truncate">
                     {track.artist}
                   </p>
                 </div>
-                
-                {/* Play button on hover */}
-                <Button
-                  size="icon"
-                  className="h-8 w-8 rounded-full bg-primary text-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                >
-                  <Play className="h-4 w-4 fill-current ml-0.5" />
-                </Button>
               </div>
             ))
           ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Music className="h-8 w-8 mb-2 opacity-50" />
-              <p className="text-sm">No songs yet</p>
-              <p className="text-xs">Play something on Spotify</p>
+            <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+              <Music className="h-6 w-6 mb-2 opacity-50" />
+              <p className="text-xs">No songs yet</p>
+              <p className="text-[10px]">Play something on Spotify</p>
             </div>
           )}
         </div>
