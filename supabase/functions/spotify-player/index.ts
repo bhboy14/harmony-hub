@@ -126,18 +126,27 @@ serve(async (req) => {
         break;
 
       case "next":
-        response = await fetchWithRetry(`${BASE_URL}/next`, { method: "POST", headers });
+        response = await fetchWithRetry(`${BASE_URL}/next${deviceId ? `?device_id=${deviceId}` : ""}`, {
+          method: "POST",
+          headers,
+        });
         break;
 
       case "previous":
-        response = await fetchWithRetry(`${BASE_URL}/previous`, { method: "POST", headers });
+        response = await fetchWithRetry(`${BASE_URL}/previous${deviceId ? `?device_id=${deviceId}` : ""}`, {
+          method: "POST",
+          headers,
+        });
         break;
 
       case "volume":
-        response = await fetchWithRetry(`${BASE_URL}/volume?volume_percent=${volume}`, {
-          method: "PUT",
-          headers,
-        });
+        response = await fetchWithRetry(
+          `${BASE_URL}/volume?volume_percent=${volume}${deviceId ? `&device_id=${deviceId}` : ""}`,
+          {
+            method: "PUT",
+            headers,
+          },
+        );
         break;
 
       case "transfer":
