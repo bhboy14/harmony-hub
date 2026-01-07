@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Play, Library, History, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSpotify } from "@/contexts/SpotifyContext";
-import { supabase } from "@/integrations/supabase/client";
+
 import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { useRecentlyPlayed } from "@/hooks/useRecentlyPlayed";
@@ -90,44 +90,25 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
 
   // Handler for playing a recently played track
   const playRecentTrack = async (track: any) => {
-    if (!spotify.tokens?.accessToken) return;
     setPlayError(null);
 
     try {
-      // Use web player device as fallback if no active device
-      const deviceId = spotify.playbackState?.device?.id || spotify.webPlayerDeviceId;
       const uri = track.uri;
-
       if (!uri) {
         setPlayError("Track URI not available for playback.");
         return;
       }
 
-      if (!deviceId) {
-        setPlayError("No active Spotify device found. Open Spotify on a device or wait for the web player to connect.");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("spotify-player", {
-        body: {
-          action: "play",
-          accessToken: spotify.tokens.accessToken,
-          uri: uri,
-          deviceId: deviceId,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error.message || data.error);
-      
-      setTimeout(() => spotify.refreshPlaybackState(), 500);
+      await spotify.play(uri);
     } catch (error: any) {
       console.error("Failed to play recent track:", error);
-      const msg = error.message || "";
+      const msg = error?.message || "";
       if (msg.includes("No active device") || msg.includes("not found")) {
         setPlayError("No active Spotify device. Open Spotify on your phone/computer, play any song briefly, then try again.");
       } else if (msg.includes("Premium")) {
         setPlayError("Spotify Premium is required for playback control.");
+      } else if (msg.includes("rate limit") || msg.includes("429")) {
+        setPlayError("Spotify is rate limiting requests. Please wait a moment and try again.");
       } else {
         setPlayError(msg || "Failed to start playback.");
       }
@@ -135,38 +116,20 @@ export const HomeContent = ({ onOpenSearch }: HomeContentProps) => {
   };
 
   const playItem = async (item: QuickPlayItem) => {
-    if (!spotify.tokens?.accessToken || !item.uri) return;
     setPlayError(null);
 
     try {
-      // Use web player device as fallback if no active device
-      const deviceId = spotify.playbackState?.device?.id || spotify.webPlayerDeviceId;
-
-      if (!deviceId) {
-        setPlayError("No active Spotify device. Open Spotify on a device or wait for the web player to connect.");
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke("spotify-player", {
-        body: {
-          action: "play",
-          accessToken: spotify.tokens.accessToken,
-          uri: item.uri,
-          deviceId: deviceId,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error.message || data.error);
-      
-      setTimeout(() => spotify.refreshPlaybackState(), 500);
+      if (!item.uri) return;
+      await spotify.play(item.uri);
     } catch (error: any) {
       console.error("Failed to play:", error);
-      const msg = error.message || "";
+      const msg = error?.message || "";
       if (msg.includes("No active device") || msg.includes("not found")) {
         setPlayError("No active Spotify device. Open Spotify on your phone/computer, play any song briefly, then try again.");
       } else if (msg.includes("Premium")) {
         setPlayError("Spotify Premium is required for playback control.");
+      } else if (msg.includes("rate limit") || msg.includes("429")) {
+        setPlayError("Spotify is rate limiting requests. Please wait a moment and try again.");
       } else {
         setPlayError(msg || "Failed to start playback.");
       }

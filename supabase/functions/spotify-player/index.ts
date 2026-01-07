@@ -18,36 +18,48 @@ async function safeParseResponse(response: Response): Promise<any> {
   }
 }
 
+class RateLimitError extends Error {
+  retryAfterSeconds?: number;
+  constructor(message: string, retryAfterSeconds?: number) {
+    super(message);
+    this.name = "RateLimitError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 // Retry wrapper with exponential backoff for rate-limited requests
 async function fetchWithRetry(
   url: string,
   options: RequestInit,
-  maxRetries = 3
+  maxRetries = 3,
 ): Promise<Response> {
-  let lastError: Error | null = null;
-  
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, options);
-    
-    if (response.status === 429) {
-      // Get retry-after header or use exponential backoff
-      const retryAfter = response.headers.get("Retry-After");
-      const waitMs = retryAfter 
-        ? parseInt(retryAfter, 10) * 1000 
-        : Math.min(1000 * Math.pow(2, attempt), 10000); // 1s, 2s, 4s, max 10s
-      
-      if (attempt < maxRetries) {
-        console.log(`Rate limited (429), waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}`);
-        await new Promise(resolve => setTimeout(resolve, waitMs));
-        continue;
-      }
-      lastError = new Error(`Rate limited after ${maxRetries} retries`);
+
+    if (response.status !== 429) return response;
+
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined;
+    const waitMs = Number.isFinite(retryAfterSeconds)
+      ? Math.max(0, (retryAfterSeconds as number) * 1000)
+      : Math.min(1000 * Math.pow(2, attempt), 10000); // 1s, 2s, 4s, max 10s
+
+    if (attempt < maxRetries) {
+      console.log(
+        `Rate limited (429), waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
     }
-    
-    return response;
+
+    // After retries, throw a typed error so we can return a friendly 429 response
+    throw new RateLimitError(
+      "Spotify is rate limiting requests. Please try again shortly.",
+      Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : undefined,
+    );
   }
-  
-  throw lastError || new Error("Max retries exceeded");
+
+  throw new Error("Max retries exceeded");
 }
 
 serve(async (req) => {
@@ -193,6 +205,23 @@ serve(async (req) => {
     });
   } catch (error: any) {
     console.error("Spotify player error:", error);
+
+    // Return a proper 429 with a friendly message (instead of masking it as a 400)
+    if (error?.name === "RateLimitError") {
+      const retryAfterSeconds = error?.retryAfterSeconds;
+      const suffix = retryAfterSeconds ? ` Please wait ${retryAfterSeconds}s and try again.` : " Please try again shortly.";
+      return new Response(
+        JSON.stringify({
+          error: `Spotify rate limit hit.${suffix}`,
+          retry_after_seconds: retryAfterSeconds ?? null,
+        }),
+        {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(JSON.stringify({ error: error.message || "Unknown error" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

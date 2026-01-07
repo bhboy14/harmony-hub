@@ -156,7 +156,7 @@ export const SpotifyPlayer = () => {
                 max={normalizeToSeconds(playbackState.track.duration_ms)}
                 step={1}
                 disabled={!canControl}
-                onValueChange={([val]) => canControl && seek?.(val * 1000)} // Seek expects ms
+                onValueCommit={([val]) => canControl && seek?.(val * 1000)}
                 className="cursor-pointer"
               />
               <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
