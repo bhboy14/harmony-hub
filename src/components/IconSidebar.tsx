@@ -1,8 +1,6 @@
 import { 
   Home, 
-  Search,
   Library,
-  Plus,
   Heart,
   Bell,
   Megaphone, 
@@ -26,13 +24,12 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
 
   const mainNav = [
     { id: "dashboard", icon: Home, label: "Home" },
-    { id: "search", icon: Search, label: "Search" },
   ];
 
+  // Library nav items now go to dashboard since it's unified
   const libraryNav = [
-    { id: "library", icon: Library, label: "Your Library" },
-    { id: "create", icon: Plus, label: "Create Playlist" },
-    { id: "liked", icon: Heart, label: "Liked Songs", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
+    { id: "dashboard", icon: Library, label: "Your Library" },
+    { id: "dashboard", icon: Heart, label: "Liked Songs", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
   ];
 
   const specialNav = [
@@ -99,7 +96,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
                       ? "bg-secondary text-foreground" 
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   }`}
-                  onClick={() => setActiveTab(item.id === "liked" ? "library" : item.id)}
+                  onClick={() => setActiveTab("dashboard")}
                 >
                   {item.color ? (
                     <div className={`w-6 h-6 rounded flex items-center justify-center ${item.color}`}>
