@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconSidebar } from "@/components/IconSidebar";
-import { HomeContent } from "@/components/HomeContent";
+import { DashboardMusic } from "@/components/DashboardMusic";
 import { NowPlayingPanel } from "@/components/NowPlayingPanel";
-import { MusicBrowser } from "@/components/MusicBrowser";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
 import { MediaLibrary } from "@/components/MediaLibrary";
@@ -170,12 +169,7 @@ const Index = () => {
 
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-32 no-scrollbar">
-            {activeTab === "dashboard" && <HomeContent onOpenSearch={() => setActiveTab("search")} />}
-            {activeTab === "search" && (
-              <div className="p-6 animate-fade-in">
-                <MusicBrowser onOpenFullLibrary={() => setActiveTab("library")} />
-              </div>
-            )}
+            {activeTab === "dashboard" && <DashboardMusic />}
             {activeTab === "library" && (
               <div className="p-6 h-full animate-fade-in flex flex-col">
                 <Tabs defaultValue="unified" className="flex-1 flex flex-col space-y-6">
