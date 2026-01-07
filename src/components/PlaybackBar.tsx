@@ -151,11 +151,21 @@ export const PlaybackBar = () => {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const handleSeek = async (value: number[]) => {
-    // Converts back to milliseconds ONLY for Spotify API
-    const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
-    await seek(seekTarget);
-  };
+  // Debounce ref for seek
+  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const handleSeek = useCallback((value: number[]) => {
+    // Clear any pending seek
+    if (seekTimeoutRef.current) {
+      clearTimeout(seekTimeoutRef.current);
+    }
+    // Debounce the actual seek call to prevent hammering API
+    seekTimeoutRef.current = setTimeout(async () => {
+      // Converts back to milliseconds ONLY for Spotify API
+      const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
+      await seek(seekTarget);
+    }, 150); // 150ms debounce for smooth dragging
+  }, [activeSource, seek]);
 
   const handleMicToggle = async () => {
     await pa.toggleBroadcast();
@@ -256,7 +266,7 @@ export const PlaybackBar = () => {
                value={[normalizeToSeconds(progress)]}
                max={normalizeToSeconds(duration) || 100}
                step={1}
-               onValueCommit={handleSeek}
+               onValueChange={handleSeek}
                className="cursor-pointer"
              />
              <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
