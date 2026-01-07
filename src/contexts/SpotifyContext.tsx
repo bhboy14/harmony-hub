@@ -263,50 +263,57 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const pause = useCallback(async () => {
-    await callSpotifyApi("pause");
+    const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    await callSpotifyApi("pause", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState]);
+  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
 
   const next = useCallback(async () => {
-    await callSpotifyApi("next");
+    const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    await callSpotifyApi("next", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState]);
+  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
 
   const previous = useCallback(async () => {
-    await callSpotifyApi("previous");
+    const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    await callSpotifyApi("previous", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState]);
+  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
 
   const seek = useCallback(
     async (positionMs: number) => {
-      await callSpotifyApi("seek", { position: Math.floor(positionMs) });
+      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+      await callSpotifyApi("seek", { position: Math.floor(positionMs), deviceId: targetDeviceId });
       setPlaybackState((prev) => (prev ? { ...prev, progress: positionMs } : null));
     },
-    [callSpotifyApi],
+    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
   );
 
   const setVolume = useCallback(
     async (volume: number) => {
       // Mark that we're actively changing volume
       isVolumeChangingRef.current = true;
-      
+
       // Clear any existing timeout
       if (volumeChangeTimeoutRef.current) {
         clearTimeout(volumeChangeTimeoutRef.current);
       }
-      
+
       // Update local state immediately for responsive UI
       setPlaybackState((prev) => (prev ? { ...prev, volume } : null));
-      
-      // Call API
-      await callSpotifyApi("volume", { volume: Math.round(volume) });
-      
+
+      // Prefer our web player device, fallback to currently reported device
+      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+
+      // Call API (send deviceId so Spotify doesn't require an "active" device)
+      await callSpotifyApi("volume", { volume: Math.round(volume), deviceId: targetDeviceId });
+
       // Keep the flag active for 2 seconds after the last change to prevent refresh from overwriting
       volumeChangeTimeoutRef.current = setTimeout(() => {
         isVolumeChangingRef.current = false;
       }, 2000);
     },
-    [callSpotifyApi],
+    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
   );
 
   const fadeVolume = useCallback(
@@ -315,15 +322,19 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       const steps = Math.max(10, Math.floor(durationMs / 100));
       const stepDuration = durationMs / steps;
       const volumeDelta = (targetVolume - currentVolume) / steps;
+      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
 
       for (let i = 1; i <= steps; i++) {
         const newVolume = Math.round(currentVolume + volumeDelta * i);
-        await callSpotifyApi("volume", { volume: Math.max(0, Math.min(100, newVolume)) });
+        await callSpotifyApi("volume", {
+          volume: Math.max(0, Math.min(100, newVolume)),
+          deviceId: targetDeviceId,
+        });
         await new Promise((resolve) => setTimeout(resolve, stepDuration));
       }
       setPlaybackState((prev) => (prev ? { ...prev, volume: targetVolume } : null));
     },
-    [callSpotifyApi, playbackState?.volume],
+    [callSpotifyApi, playbackState?.volume, webPlayerDeviceId, playbackState?.device?.id],
   );
 
   const transferPlayback = useCallback(
