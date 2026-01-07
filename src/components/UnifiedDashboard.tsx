@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { 
   Search, Play, Music, Loader2, Plus, Trash2, ListPlus, ListEnd, 
   Library, History, TrendingUp, Youtube, HardDrive, MoreHorizontal, 
-  ListMusic, User, AlertCircle, ChevronDown, ChevronUp
+  ListMusic, User, AlertCircle, ChevronDown, ChevronUp, FolderOpen, 
+  RefreshCw, Eye, EyeOff, Volume2, Pause
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useUnifiedLibrary, UnifiedTrack, UnifiedPlaylist } from "@/hooks/useUnifiedLibrary";
 import { useRecentlyPlayed } from "@/hooks/useRecentlyPlayed";
+import { useMediaLibrary, Track as LocalTrack } from "@/hooks/useMediaLibrary";
 import { useToast } from "@/hooks/use-toast";
 import { SourceIcon } from "@/components/SourceIcon";
 import { RecentlyPlayed } from "@/components/RecentlyPlayed";
@@ -50,10 +53,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 const SpotifyIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
     <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+  </svg>
+);
+
+const YouTubeIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
   </svg>
 );
 
@@ -86,6 +100,9 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
   const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
   
+  // Media Library hook for folder scanning
+  const mediaLibrary = useMediaLibrary();
+  
   // Library hook
   const { 
     tracks: dbTracks, 
@@ -111,11 +128,37 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
   const [activeSearchFilter, setActiveSearchFilter] = useState<'all' | 'spotify' | 'youtube' | 'local'>('all');
   const [playError, setPlayError] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showLocalFolder, setShowLocalFolder] = useState(false);
+  const [showYouTubePlayer, setShowYouTubePlayer] = useState(false);
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
-  // Merge local folder tracks with DB tracks
-  const convertedLocalTracks: UnifiedTrack[] = localFolderTracks.map((lt) => {
+  // Helper: extract YouTube video ID from URL
+  const extractVideoId = (url: string): string | null => {
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+      /^([a-zA-Z0-9_-]{11})$/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+
+  const handlePlayYouTubeUrl = () => {
+    const videoId = extractVideoId(youtubeUrl);
+    if (videoId) {
+      unifiedAudio.playYouTubeVideo(videoId, "YouTube Video");
+      toast({ title: "Playing YouTube", description: "Video is now playing" });
+    } else {
+      toast({ title: "Invalid URL", description: "Please enter a valid YouTube URL", variant: "destructive" });
+    }
+  };
+
+  // Merge local folder tracks (from props + mediaLibrary) with DB tracks
+  const folderTracks = mediaLibrary.tracks.map((lt) => {
     const durationParts = lt.duration.split(':').map(Number);
     let durationMs = 0;
     if (durationParts.length === 3) {
@@ -135,9 +178,31 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       createdAt: new Date().toISOString(),
     };
   });
+
+  const convertedLocalTracks: UnifiedTrack[] = localFolderTracks.map((lt) => {
+    const durationParts = lt.duration.split(':').map(Number);
+    let durationMs = 0;
+    if (durationParts.length === 3) {
+      durationMs = (durationParts[0] * 3600 + durationParts[1] * 60 + durationParts[2]) * 1000;
+    } else if (durationParts.length === 2) {
+      durationMs = (durationParts[0] * 60 + durationParts[1]) * 1000;
+    }
+    return {
+      id: `local-prop-${lt.id}`,
+      title: lt.title,
+      artist: lt.artist || null,
+      albumArt: lt.albumArt || null,
+      source: 'local' as const,
+      externalId: null,
+      localUrl: lt.url || null,
+      durationMs,
+      createdAt: new Date().toISOString(),
+    };
+  });
   
   const allTracks: UnifiedTrack[] = [...dbTracks];
-  for (const localTrack of convertedLocalTracks) {
+  // Add folder tracks
+  for (const localTrack of [...folderTracks, ...convertedLocalTracks]) {
     const exists = allTracks.some(
       (t) => t.source === 'local' && 
         t.title.toLowerCase() === localTrack.title.toLowerCase() &&
@@ -275,6 +340,7 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       } else if (track.source === 'youtube' && track.videoId) {
         unifiedAudio.playYouTubeVideo(track.videoId, track.name);
       } else if (track.source === 'local') {
+        // First check allTracks (unified library + folder tracks)
         const libTrack = allTracks.find(t => t.id === track.id);
         if (libTrack?.localUrl) {
           unifiedAudio.playLocalTrack({
@@ -285,6 +351,19 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
             url: libTrack.localUrl,
             albumArt: libTrack.albumArt || undefined,
           });
+        } else {
+          // Fallback to mediaLibrary tracks directly
+          const mlTrack = mediaLibrary.tracks.find(t => t.id === track.id || `local-folder-${t.id}` === track.id);
+          if (mlTrack?.url) {
+            unifiedAudio.playLocalTrack({
+              id: mlTrack.id,
+              title: mlTrack.title,
+              artist: mlTrack.artist || '',
+              duration: mlTrack.duration,
+              url: mlTrack.url,
+              albumArt: mlTrack.albumArt || undefined,
+            });
+          }
         }
       }
     } catch (error: any) {
@@ -548,6 +627,147 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
             </div>
           </div>
         )}
+
+        {/* YouTube Player Section */}
+        <Collapsible open={showYouTubePlayer} onOpenChange={setShowYouTubePlayer}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors w-full text-left">
+              <Youtube className="h-4 w-4 text-red-500" />
+              YouTube Player
+              {showYouTubePlayer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <div className="rounded-xl bg-gradient-to-br from-red-500/10 via-red-500/5 to-background border border-red-500/20 p-4 space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Paste YouTube URL or Video ID..."
+                  value={youtubeUrl}
+                  onChange={(e) => setYoutubeUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePlayYouTubeUrl()}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={handlePlayYouTubeUrl}
+                  disabled={!youtubeUrl.trim()}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  <Play className="h-4 w-4 mr-1" /> Play
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Paste a YouTube URL to play audio. Video plays in background for music streaming.
+              </p>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Local Folder Scanner Section */}
+        <Collapsible open={showLocalFolder} onOpenChange={setShowLocalFolder}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors w-full text-left">
+              <FolderOpen className="h-4 w-4 text-amber-500" />
+              Local Music Folder
+              {mediaLibrary.folderName && (
+                <Badge variant="secondary" className="ml-2 text-xs">
+                  {mediaLibrary.folderName}
+                </Badge>
+              )}
+              {showLocalFolder ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            <div className="rounded-xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-background border border-amber-500/20 p-4 space-y-4">
+              {/* Folder Selection */}
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  onClick={mediaLibrary.selectFolder}
+                  disabled={mediaLibrary.isScanning}
+                  variant="outline"
+                  className="border-amber-500/30 hover:bg-amber-500/10"
+                >
+                  <FolderOpen className="h-4 w-4 mr-2" />
+                  {mediaLibrary.folderName ? "Change Folder" : "Select Folder"}
+                </Button>
+                
+                {mediaLibrary.folderName && (
+                  <>
+                    <Button 
+                      onClick={mediaLibrary.needsPermission ? mediaLibrary.requestPermissionAndScan : mediaLibrary.rescanFolder}
+                      disabled={mediaLibrary.isScanning}
+                      variant="outline"
+                      className="border-amber-500/30 hover:bg-amber-500/10"
+                    >
+                      {mediaLibrary.isScanning ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                      )}
+                      {mediaLibrary.needsPermission ? "Grant Access" : "Rescan"}
+                    </Button>
+                    <Button 
+                      onClick={mediaLibrary.clearSavedFolder}
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      Clear
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Folder Status */}
+              {mediaLibrary.folderName && (
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <HardDrive className="h-4 w-4" />
+                  <span>{mediaLibrary.tracks.length} tracks in <strong>{mediaLibrary.folderName}</strong></span>
+                  {mediaLibrary.isWatching && (
+                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">
+                      <Eye className="h-3 w-3 mr-1" /> Watching
+                    </Badge>
+                  )}
+                </div>
+              )}
+
+              {/* Folder Tracks Preview */}
+              {mediaLibrary.tracks.length > 0 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                  {mediaLibrary.tracks.slice(0, 10).map((track) => (
+                    <div
+                      key={track.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer transition-all group"
+                      onClick={() => mediaLibrary.playTrack(track)}
+                    >
+                      <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center">
+                        <Music className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{track.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{track.duration}</span>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100">
+                        <Play className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  {mediaLibrary.tracks.length > 10 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      +{mediaLibrary.tracks.length - 10} more tracks
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!mediaLibrary.folderName && (
+                <p className="text-xs text-muted-foreground">
+                  Select a folder containing your music files (MP3, WAV, FLAC, M4A, etc.)
+                </p>
+              )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Connect Spotify Banner */}
         {!spotify.isConnected && (
