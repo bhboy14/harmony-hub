@@ -888,30 +888,37 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   }, [isMuted, previousVolume, volume, setGlobalVolume]);
 
   const seek = useCallback(async (positionMs: number) => {
+    // Update local state immediately for responsive UI
+    setProgress(positionMs);
+    
     switch (activeSource) {
       case 'local':
         if (localAudioRef.current) {
           localAudioRef.current.currentTime = positionMs / 1000;
-          setProgress(positionMs);
         }
         break;
       case 'soundcloud':
         if (soundcloudAudioRef.current) {
           soundcloudAudioRef.current.currentTime = positionMs / 1000;
-          setProgress(positionMs);
         }
         break;
       case 'youtube':
         if (youtubePlayerRef.current?.seekTo) {
           youtubePlayerRef.current.seekTo(positionMs / 1000, true);
-          setProgress(positionMs);
         }
         break;
       case 'spotify':
-        // Spotify seek would require additional API implementation
+        // Use the Spotify context's seek function
+        if (spotify.isConnected) {
+          try {
+            await spotify.seek(positionMs);
+          } catch (err) {
+            console.error('Spotify seek failed:', err);
+          }
+        }
         break;
     }
-  }, [activeSource]);
+  }, [activeSource, spotify]);
 
   const playLocalTrack = useCallback(async (track: LocalTrackInfo) => {
     if (!localAudioRef.current) return;

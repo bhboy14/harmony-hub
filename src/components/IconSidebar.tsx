@@ -26,11 +26,15 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
     { id: "dashboard", icon: Home, label: "Home" },
   ];
 
-  // Library nav items now go to dashboard since it's unified
+  // Library nav items - all go to dashboard (unified library view)
   const libraryNav = [
     { id: "library", icon: Library, label: "Your Library", action: "dashboard" },
     { id: "liked", icon: Heart, label: "Liked Songs", action: "dashboard", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
   ];
+
+  const handleNavClick = (item: typeof libraryNav[0]) => {
+    setActiveTab(item.action);
+  };
 
   const specialNav = [
     { id: "azan", icon: Bell, label: "Athan Schedule" },
@@ -96,7 +100,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
                       ? "bg-secondary text-foreground" 
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   }`}
-                  onClick={() => setActiveTab(item.action)}
+                  onClick={() => handleNavClick(item)}
                 >
                   {item.color ? (
                     <div className={`w-6 h-6 rounded flex items-center justify-center ${item.color}`}>
