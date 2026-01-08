@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconSidebar } from "@/components/IconSidebar";
 import { UnifiedDashboard } from "@/components/UnifiedDashboard";
-import { NowPlayingPanel } from "@/components/NowPlayingPanel";
+import { SidebarPanel } from "@/components/SidebarPanel";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -171,9 +171,7 @@ const Index = () => {
           </main>
 
           {showNowPlaying && (
-            <aside className="w-80 border-l border-white/10 bg-black/40 flex flex-col h-full animate-in slide-in-from-right duration-300 shrink-0">
-              <NowPlayingPanel isOpen={true} onClose={() => setShowNowPlaying(false)} />
-            </aside>
+            <SidebarPanel isOpen={true} onClose={() => setShowNowPlaying(false)} />
           )}
         </div>
       </div>
