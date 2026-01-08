@@ -151,20 +151,32 @@ export const PlaybackBar = () => {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Debounce ref for seek
+  // Seek state management - track dragging to prevent progress sync interference
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragValue, setDragValue] = useState(0);
   const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  const handleSeek = useCallback((value: number[]) => {
+  // While dragging, show the drag position; otherwise show actual progress
+  const displayProgress = isDragging ? dragValue : normalizeToSeconds(progress);
+  
+  const handleSeekChange = useCallback((value: number[]) => {
+    // User is dragging - update local state immediately for responsive UI
+    setIsDragging(true);
+    setDragValue(value[0]);
+  }, []);
+  
+  const handleSeekCommit = useCallback(async (value: number[]) => {
+    // User released the slider - send the seek command
+    setIsDragging(false);
+    
     // Clear any pending seek
     if (seekTimeoutRef.current) {
       clearTimeout(seekTimeoutRef.current);
     }
-    // Debounce the actual seek call to prevent hammering API
-    seekTimeoutRef.current = setTimeout(async () => {
-      // Converts back to milliseconds ONLY for Spotify API
-      const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0];
-      await seek(seekTarget);
-    }, 150); // 150ms debounce for smooth dragging
+    
+    // Convert to milliseconds for the API
+    const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0] * 1000;
+    await seek(seekTarget);
   }, [activeSource, seek]);
 
   const handleMicToggle = async () => {
@@ -261,13 +273,16 @@ export const PlaybackBar = () => {
           </div>
 
            <div className="flex items-center gap-2 w-full max-w-[600px]">
-             <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">{formatTime(progress)}</span>
+             <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">
+               {isDragging ? formatTime(dragValue * 1000) : formatTime(progress)}
+             </span>
              <Slider
-               value={[normalizeToSeconds(progress)]}
+               value={[displayProgress]}
                max={normalizeToSeconds(duration) || 100}
-               step={1}
-               onValueChange={handleSeek}
-               className="cursor-pointer"
+               step={0.5}
+               onValueChange={handleSeekChange}
+               onValueCommit={handleSeekCommit}
+               className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2"
              />
              <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
            </div>
