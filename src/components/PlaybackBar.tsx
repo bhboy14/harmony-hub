@@ -274,7 +274,7 @@ export const PlaybackBar = () => {
 
            <div className="flex items-center gap-2 w-full max-w-[600px]">
              <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">
-               {isDragging ? formatTime(dragValue) : formatTime(progress)}
+               {isDragging ? formatTime(dragValue * 1000) : formatTime(progress)}
              </span>
              <Slider
                value={[displayProgress]}
