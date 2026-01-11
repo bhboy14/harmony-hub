@@ -12,9 +12,16 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
 
   if (!isOpen) return null;
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+  // Spotify sends milliseconds, local sources send seconds
+  const normalizeToSeconds = (time: number) => {
+    if (time === undefined || isNaN(time) || time < 0) return 0;
+    return activeSource === "spotify" ? time / 1000 : time;
+  };
+
+  const formatTime = (time: number) => {
+    const totalSeconds = Math.floor(normalizeToSeconds(time));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
