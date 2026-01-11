@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { X, Music, Play, ChevronLeft, ChevronRight, Disc, ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface SidebarPanelProps {
@@ -18,16 +19,43 @@ const SpotifyIcon = () => (
 
 export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
   const [activeTab, setActiveTab] = useState<"nowPlaying" | "popular">("nowPlaying");
-  const { currentTrack, activeSource, isPlaying, progress, duration } = useUnifiedAudio();
+  const { currentTrack, activeSource, isPlaying, progress, duration, seek } = useUnifiedAudio();
   const spotify = useSpotify();
 
   if (!isOpen) return null;
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+  // Seek state management - identical to PlaybackBar
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragValue, setDragValue] = useState(0);
+  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // All sources store progress/duration in milliseconds
+  const msToSeconds = (ms: number | undefined) => {
+    if (ms === undefined || isNaN(ms) || ms < 0) return 0;
+    return ms / 1000;
+  };
+
+  const formatTime = (ms: number | undefined) => {
+    const totalSeconds = Math.floor(msToSeconds(ms));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // While dragging, show the drag position (in seconds); otherwise show actual progress (in ms, converted)
+  const displayProgress = isDragging ? dragValue : msToSeconds(progress);
+
+  const handleSeekChange = useCallback((value: number[]) => {
+    setIsDragging(true);
+    setDragValue(value[0]);
+  }, []);
+
+  const handleSeekCommit = useCallback(async (value: number[]) => {
+    setIsDragging(false);
+    if (seekTimeoutRef.current) clearTimeout(seekTimeoutRef.current);
+    const seekTargetMs = value[0] * 1000;
+    await seek(seekTargetMs);
+  }, [seek]);
 
   const getSourceColor = (source: string | null) => {
     switch (source) {
@@ -166,18 +194,20 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
               </p>
             </div>
 
-            {/* Progress */}
+            {/* Progress (Seek) */}
             {currentTrack && (
               <div className="space-y-2">
-                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full ${getSourceColor(activeSource)} transition-all duration-200`}
-                    style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}
-                  />
-                </div>
+                <Slider
+                  value={[displayProgress]}
+                  max={msToSeconds(duration) || 100}
+                  step={0.5}
+                  onValueChange={handleSeekChange}
+                  onValueCommit={handleSeekCommit}
+                  className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2"
+                />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{formatTime(progress || 0)}</span>
-                  <span>{formatTime(duration || 0)}</span>
+                  <span>{isDragging ? formatTime(dragValue * 1000) : formatTime(progress)}</span>
+                  <span>{formatTime(duration)}</span>
                 </div>
               </div>
             )}
