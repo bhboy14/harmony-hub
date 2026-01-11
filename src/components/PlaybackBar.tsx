@@ -138,14 +138,14 @@ export const PlaybackBar = () => {
     };
   }, [volume, musicVolume, isMuted, unified.localAudioRef, activeSource, spotify]);
 
-  // FIXED: Explicitly checks source to handle Spotify ms vs Local seconds
-  const normalizeToSeconds = (time: number | undefined) => {
-    if (time === undefined || isNaN(time) || time < 0) return 0;
-    return activeSource === "spotify" ? time / 1000 : time;
+  // All sources now store progress/duration in milliseconds
+  const msToSeconds = (ms: number | undefined) => {
+    if (ms === undefined || isNaN(ms) || ms < 0) return 0;
+    return ms / 1000;
   };
 
-  const formatTime = (time: number | undefined) => {
-    const totalSeconds = Math.floor(normalizeToSeconds(time));
+  const formatTime = (ms: number | undefined) => {
+    const totalSeconds = Math.floor(msToSeconds(ms));
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, "0")}`;
@@ -156,8 +156,8 @@ export const PlaybackBar = () => {
   const [dragValue, setDragValue] = useState(0);
   const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // While dragging, show the drag position; otherwise show actual progress
-  const displayProgress = isDragging ? dragValue : normalizeToSeconds(progress);
+  // While dragging, show the drag position (in seconds); otherwise show actual progress (in ms, converted)
+  const displayProgress = isDragging ? dragValue : msToSeconds(progress);
   
   const handleSeekChange = useCallback((value: number[]) => {
     // User is dragging - update local state immediately for responsive UI
@@ -174,10 +174,10 @@ export const PlaybackBar = () => {
       clearTimeout(seekTimeoutRef.current);
     }
     
-    // Convert to milliseconds for the API
-    const seekTarget = activeSource === "spotify" ? value[0] * 1000 : value[0] * 1000;
-    await seek(seekTarget);
-  }, [activeSource, seek]);
+    // Convert seconds back to milliseconds for the API
+    const seekTargetMs = value[0] * 1000;
+    await seek(seekTargetMs);
+  }, [seek]);
 
   const handleMicToggle = async () => {
     await pa.toggleBroadcast();
@@ -278,7 +278,7 @@ export const PlaybackBar = () => {
              </span>
              <Slider
                value={[displayProgress]}
-               max={normalizeToSeconds(duration) || 100}
+               max={msToSeconds(duration) || 100}
                step={0.5}
                onValueChange={handleSeekChange}
                onValueCommit={handleSeekCommit}

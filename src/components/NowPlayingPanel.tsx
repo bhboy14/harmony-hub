@@ -12,14 +12,10 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
 
   if (!isOpen) return null;
 
-  // Spotify sends milliseconds, local sources send seconds
-  const normalizeToSeconds = (time: number) => {
-    if (time === undefined || isNaN(time) || time < 0) return 0;
-    return activeSource === "spotify" ? time / 1000 : time;
-  };
-
-  const formatTime = (time: number) => {
-    const totalSeconds = Math.floor(normalizeToSeconds(time));
+  // All sources store progress/duration in milliseconds
+  const formatTime = (ms: number) => {
+    if (ms === undefined || isNaN(ms) || ms < 0) ms = 0;
+    const totalSeconds = Math.floor(ms / 1000);
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
