@@ -347,8 +347,7 @@ export const AdminPanel = () => {
                   <TableHead>User</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
-                   <TableHead>Role</TableHead>
-                   <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-20">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -278,59 +278,80 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     setRecentlyPlayed(items);
   }, [callSpotifyApi]);
 
-  const play = useCallback(
-    async (uri?: string, uris?: string[]) => {
-      // Prefer our Web Player, then any active device, then first available device
-      let targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+  // Helper to get an active device, activating one if needed
+  const getActiveDevice = useCallback(async (): Promise<string | null> => {
+    // Prefer our Web Player, then any active device
+    let targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    
+    if (targetDeviceId) return targetDeviceId;
+    
+    // No active device, try to find and activate one
+    try {
+      const deviceList = await callSpotifyApi("get_devices");
+      const availableDevices = deviceList?.devices || [];
       
-      // If no device is active, try to get the device list and use the first one
-      if (!targetDeviceId) {
-        try {
-          const deviceList = await callSpotifyApi("get_devices");
-          const availableDevices = deviceList?.devices || [];
-          // Prefer our web player if found, otherwise use the first device
-          const webPlayer = availableDevices.find((d: any) => d.name === "Harmony Hub Player");
-          const firstDevice = availableDevices[0];
-          targetDeviceId = webPlayer?.id || firstDevice?.id;
-          
-          if (targetDeviceId) {
-            // Transfer playback to activate the device
-            await callSpotifyApi("transfer", { deviceId: targetDeviceId });
-            // Wait a bit for transfer to complete
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-        } catch (err) {
-          console.error("Failed to get devices:", err);
-        }
+      if (availableDevices.length === 0) {
+        toast({
+          title: "No Spotify Device",
+          description: "Please open Spotify on a device or refresh the page to activate the web player.",
+          variant: "destructive",
+        });
+        return null;
       }
       
+      // Prefer our web player if found, otherwise use the first device
+      const webPlayer = availableDevices.find((d: any) => d.name === "Harmony Hub Player");
+      const firstDevice = availableDevices[0];
+      targetDeviceId = webPlayer?.id || firstDevice?.id;
+      
+      if (targetDeviceId) {
+        // Transfer playback to activate the device
+        await callSpotifyApi("transfer", { deviceId: targetDeviceId });
+        // Wait a bit for transfer to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      return targetDeviceId;
+    } catch (err) {
+      console.error("Failed to get devices:", err);
+      return null;
+    }
+  }, [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id, toast]);
+
+  const play = useCallback(
+    async (uri?: string, uris?: string[]) => {
+      const targetDeviceId = await getActiveDevice();
+      
       if (!targetDeviceId) {
-        throw new Error("No active Spotify device found. Please open Spotify on a device or refresh the page.");
+        return; // Toast already shown by getActiveDevice
       }
       
       await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
       setTimeout(refreshPlaybackState, 500);
     },
-    [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id],
+    [callSpotifyApi, refreshPlaybackState, getActiveDevice],
   );
 
   const pause = useCallback(async () => {
     const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    if (!targetDeviceId) return; // Nothing to pause
     await callSpotifyApi("pause", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
   }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
 
   const next = useCallback(async () => {
-    const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    const targetDeviceId = await getActiveDevice();
+    if (!targetDeviceId) return;
     await callSpotifyApi("next", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
+  }, [callSpotifyApi, refreshPlaybackState, getActiveDevice]);
 
   const previous = useCallback(async () => {
-    const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
+    const targetDeviceId = await getActiveDevice();
+    if (!targetDeviceId) return;
     await callSpotifyApi("previous", { deviceId: targetDeviceId });
     setTimeout(refreshPlaybackState, 500);
-  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
+  }, [callSpotifyApi, refreshPlaybackState, getActiveDevice]);
 
   const seek = useCallback(
     async (positionMs: number) => {
