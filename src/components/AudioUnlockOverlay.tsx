@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAudioUnlock } from "@/hooks/useAudioUnlock";
 import { Button } from "@/components/ui/button";
 import { Volume2, VolumeX } from "lucide-react";
@@ -15,6 +16,9 @@ interface AudioUnlockOverlayProps {
  */
 export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayProps) => {
   const { toast } = useToast();
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  
   const { isLocked, isIOSDevice, unlockAudio } = useAudioUnlock({
     onUnlock: () => {
       toast({
@@ -25,20 +29,29 @@ export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayPr
     },
   });
 
-  // Only show on iOS/mobile when locked
-  if (!isLocked || !isIOSDevice) {
+  // Don't show if not on iOS, not locked, or dismissed
+  if (!isIOSDevice || !isLocked || isDismissed) {
     return null;
   }
 
   const handleUnlock = async () => {
+    setIsUnlocking(true);
     const success = await unlockAudio();
-    if (!success) {
+    setIsUnlocking(false);
+    
+    if (success) {
+      setIsDismissed(true);
+    } else {
       toast({
         title: "Couldn't enable audio",
         description: "Please try tapping the button again",
         variant: "destructive",
       });
     }
+  };
+
+  const handleDismiss = () => {
+    setIsDismissed(true);
   };
 
   return (
@@ -52,7 +65,7 @@ export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayPr
     >
       <div className="flex flex-col items-center gap-4 text-center max-w-sm">
         <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-          <VolumeX className="w-10 h-10 text-primary animate-pulse" />
+          <VolumeX className="w-10 h-10 text-primary" />
         </div>
         
         <div className="space-y-2">
@@ -66,15 +79,19 @@ export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayPr
       <Button
         size="lg"
         onClick={handleUnlock}
+        disabled={isUnlocking}
         className="gap-2 px-8 py-6 text-lg rounded-full shadow-lg"
       >
         <Volume2 className="w-5 h-5" />
-        Enable Audio
+        {isUnlocking ? "Enabling..." : "Enable Audio"}
       </Button>
 
-      <p className="text-xs text-muted-foreground/60 max-w-xs text-center">
-        This only needs to be done once per session
-      </p>
+      <button
+        onClick={handleDismiss}
+        className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+      >
+        Skip for now
+      </button>
     </div>
   );
 };
@@ -109,12 +126,11 @@ export const AudioBlockedBadge = ({ className }: { className?: string }) => {
         "flex items-center gap-1.5 px-2 py-1 rounded-full",
         "bg-destructive/20 border border-destructive/30",
         "hover:bg-destructive/30 transition-colors cursor-pointer",
-        "animate-pulse",
         className
       )}
     >
       <VolumeX className="h-3 w-3 text-destructive" />
-      <span className="text-[10px] font-medium text-destructive">BLOCKED</span>
+      <span className="text-[10px] font-medium text-destructive">TAP TO ENABLE</span>
     </button>
   );
 };
