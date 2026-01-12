@@ -223,6 +223,7 @@ export const PlaybackBar = () => {
             durationMs={duration}
             onSeek={handleSeek}
             showLabels={true}
+            activeSource={activeSource}
             className="w-full max-w-[600px]"
           />
         </div>

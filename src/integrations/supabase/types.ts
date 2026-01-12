@@ -92,6 +92,57 @@ export type Database = {
         }
         Relationships: []
       }
+      playback_sync: {
+        Row: {
+          active_source: string | null
+          created_at: string
+          duration_ms: number
+          id: string
+          is_playing: boolean
+          last_action: string | null
+          progress_ms: number
+          session_id: string
+          track_album_art: string | null
+          track_artist: string | null
+          track_id: string | null
+          track_title: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          active_source?: string | null
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          is_playing?: boolean
+          last_action?: string | null
+          progress_ms?: number
+          session_id: string
+          track_album_art?: string | null
+          track_artist?: string | null
+          track_id?: string | null
+          track_title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          active_source?: string | null
+          created_at?: string
+          duration_ms?: number
+          id?: string
+          is_playing?: boolean
+          last_action?: string | null
+          progress_ms?: number
+          session_id?: string
+          track_album_art?: string | null
+          track_artist?: string | null
+          track_id?: string | null
+          track_title?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       playlist_tracks: {
         Row: {
           added_at: string | null

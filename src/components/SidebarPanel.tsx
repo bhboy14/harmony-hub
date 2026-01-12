@@ -166,13 +166,13 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
               </p>
             </div>
 
-            {/* Progress (Seek) */}
             {currentTrack && (
               <SeekBar
                 progressMs={progress}
                 durationMs={duration}
                 onSeek={handleSeek}
                 showLabels={false}
+                activeSource={activeSource}
               />
             )}
 

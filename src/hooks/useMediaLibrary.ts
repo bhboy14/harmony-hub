@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import * as musicMetadata from "music-metadata-browser";
 
 export interface Track {
   id: string;
@@ -98,31 +99,51 @@ const formatDuration = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-const extractMetadata = async (file: File): Promise<{ title: string; artist: string; duration: string }> => {
-  return new Promise((resolve) => {
-    const audio = new Audio();
-    const url = URL.createObjectURL(file);
-    audio.src = url;
+const extractMetadata = async (file: File): Promise<{ title: string; artist: string; duration: string; albumArt?: string }> => {
+  try {
+    const metadata = await musicMetadata.parseBlob(file, { duration: true });
+    const { common, format } = metadata;
     
-    audio.addEventListener('loadedmetadata', () => {
-      const duration = formatDuration(audio.duration);
-      URL.revokeObjectURL(url);
+    // Extract album art
+    let albumArt: string | undefined;
+    const picture = common.picture?.[0];
+    if (picture?.data && picture.format) {
+      const base64 = btoa(Array.from(picture.data).map(byte => String.fromCharCode(byte)).join(''));
+      let mimeType = picture.format;
+      if (!mimeType.startsWith('image/')) mimeType = `image/${mimeType}`;
+      albumArt = `data:${mimeType};base64,${base64}`;
+    }
+
+    const duration = format.duration ? formatDuration(format.duration) : "0:00";
+    const title = common.title || file.name.replace(/\.[^/.]+$/, "");
+    const artist = common.artist || common.albumartist || "Unknown Artist";
+
+    return { title, artist, duration, albumArt };
+  } catch (err) {
+    console.warn('[MediaLibrary] Metadata extraction failed, using fallback:', err);
+    // Fallback to basic extraction
+    return new Promise((resolve) => {
+      const audio = new Audio();
+      const url = URL.createObjectURL(file);
+      audio.src = url;
       
-      // Parse title and artist from filename
-      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-      const parts = nameWithoutExt.split(' - ');
-      const artist = parts.length > 1 ? parts[0].trim() : "Unknown Artist";
-      const title = parts.length > 1 ? parts.slice(1).join(' - ').trim() : nameWithoutExt;
+      audio.addEventListener('loadedmetadata', () => {
+        const duration = formatDuration(audio.duration);
+        URL.revokeObjectURL(url);
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+        const parts = nameWithoutExt.split(' - ');
+        const artist = parts.length > 1 ? parts[0].trim() : "Unknown Artist";
+        const title = parts.length > 1 ? parts.slice(1).join(' - ').trim() : nameWithoutExt;
+        resolve({ title, artist, duration });
+      });
       
-      resolve({ title, artist, duration });
+      audio.addEventListener('error', () => {
+        URL.revokeObjectURL(url);
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+        resolve({ title: nameWithoutExt, artist: "Unknown", duration: "0:00" });
+      });
     });
-    
-    audio.addEventListener('error', () => {
-      URL.revokeObjectURL(url);
-      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-      resolve({ title: nameWithoutExt, artist: "Unknown", duration: "0:00" });
-    });
-  });
+  }
 };
 
 const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.wma'];
@@ -236,6 +257,7 @@ export const useMediaLibrary = () => {
               source: "local",
               fileHandle: entry,
               url,
+              albumArt: metadata.albumArt,
             });
           } catch (err) {
             console.error(`Error reading ${name}:`, err);

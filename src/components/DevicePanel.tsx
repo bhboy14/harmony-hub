@@ -10,7 +10,10 @@ import {
   Wifi,
   Volume2,
   Plus,
-  ChevronRight
+  ChevronRight,
+  AudioLines,
+  RefreshCw,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -18,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -29,8 +33,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useCasting, CastDevice } from "@/contexts/CastingContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
+import { useAudioOutput } from "@/hooks/useAudioOutput";
+import { useNetworkSpeakers } from "@/hooks/useNetworkSpeakers";
 
 interface DevicePanelProps {
   variant?: "default" | "ghost" | "outline";
@@ -38,7 +51,7 @@ interface DevicePanelProps {
   className?: string;
 }
 
-type DeviceType = 'spotify' | 'chromecast' | 'airplay' | 'multiroom';
+type DeviceType = 'spotify' | 'chromecast' | 'airplay' | 'multiroom' | 'local';
 
 interface UnifiedDevice {
   id: string;
@@ -55,9 +68,14 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
   const [isOpen, setIsOpen] = useState(false);
   const [multiroomEnabled, setMultiroomEnabled] = useState(false);
   const [selectedDevices, setSelectedDevices] = useState<Set<string>>(new Set());
+  const [addSpeakerOpen, setAddSpeakerOpen] = useState(false);
+  const [newSpeakerName, setNewSpeakerName] = useState("");
+  const [newSpeakerIp, setNewSpeakerIp] = useState("");
 
   const casting = useCasting();
   const spotify = useSpotify();
+  const audioOutput = useAudioOutput();
+  const networkSpeakers = useNetworkSpeakers({ enabled: true });
 
   // Check browser capabilities
   const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -65,6 +83,20 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
 
   // Build unified device list
   const devices: UnifiedDevice[] = [];
+
+  // Add local audio output devices
+  if (audioOutput.devices.length > 0) {
+    audioOutput.devices.forEach((device) => {
+      devices.push({
+        id: `local-${device.deviceId}`,
+        name: device.label,
+        type: 'local',
+        deviceType: 'Speaker',
+        isActive: device.deviceId === audioOutput.currentDeviceId,
+        spotifyId: undefined,
+      });
+    });
+  }
 
   // Add Spotify devices
   if (spotify.devices && spotify.devices.length > 0) {
@@ -104,6 +136,7 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
     if (device.type === 'airplay') return <Airplay className="h-4 w-4" />;
     if (device.type === 'chromecast') return <Cast className="h-4 w-4" />;
     if (device.type === 'multiroom') return <Speaker className="h-4 w-4" />;
+    if (device.type === 'local') return <AudioLines className="h-4 w-4" />;
     
     // Spotify device types
     switch (device.deviceType?.toLowerCase()) {
@@ -128,7 +161,10 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
       });
     } else {
       // Single device selection
-      if (device.type === 'spotify' && device.spotifyId) {
+      if (device.type === 'local') {
+        const deviceId = device.id.replace('local-', '');
+        await audioOutput.setOutputDevice(deviceId);
+      } else if (device.type === 'spotify' && device.spotifyId) {
         try {
           await spotify.transferPlayback(device.spotifyId);
         } catch (err) {
@@ -154,6 +190,21 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
     const device = devices.find(d => d.id === deviceId);
     if (device?.type === 'multiroom' && device.castDevice) {
       casting.setDeviceVolume(device.castDevice.id, volume);
+    }
+  };
+
+  const handleAddSpeaker = () => {
+    if (newSpeakerName && newSpeakerIp) {
+      networkSpeakers.addSpeakerManually(newSpeakerName, newSpeakerIp);
+      setNewSpeakerName("");
+      setNewSpeakerIp("");
+      setAddSpeakerOpen(false);
+    }
+  };
+
+  const handleShowOutputPicker = async () => {
+    if (audioOutput.isSelectorSupported) {
+      await audioOutput.showOutputPicker();
     }
   };
 
@@ -255,6 +306,29 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
               </>
             )}
 
+            {/* Local Speaker Output Selection */}
+            {audioOutput.isSelectorSupported && (
+              <>
+                <p className="text-xs font-medium text-muted-foreground px-2 py-1">
+                  Local Output
+                </p>
+                <button
+                  onClick={handleShowOutputPicker}
+                  className="w-full p-3 rounded-lg hover:bg-secondary/50 flex items-center gap-3 text-left transition-all"
+                >
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                    <AudioLines className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">Choose Speaker</p>
+                    <p className="text-xs text-muted-foreground">Select audio output device</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <Separator className="my-2" />
+              </>
+            )}
+
             {/* Spotify / Hardware Devices */}
             {devices.length > 0 && (
               <div className="space-y-1">
@@ -287,8 +361,13 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-sm truncate">{device.name}</p>
                           {device.type === 'spotify' && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-500/10 text-green-500 border-green-500/30">
                               Spotify
+                            </Badge>
+                          )}
+                          {device.type === 'local' && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                              Local
                             </Badge>
                           )}
                         </div>
@@ -342,6 +421,55 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
               </div>
             )}
 
+            {/* Network Speakers Section */}
+            {networkSpeakers.speakers.length > 0 && (
+              <>
+                <Separator className="my-2" />
+                <div className="flex items-center justify-between px-2 py-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Network Speakers
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => networkSpeakers.scanNetwork()}
+                    disabled={networkSpeakers.isScanning}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${networkSpeakers.isScanning ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+                {networkSpeakers.speakers.map((speaker) => (
+                  <div
+                    key={speaker.id}
+                    className={`p-3 rounded-lg flex items-center gap-3 ${
+                      speaker.isConnected ? 'bg-primary/10' : 'hover:bg-secondary/50'
+                    } ${!speaker.isAvailable ? 'opacity-50' : ''}`}
+                  >
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      speaker.isConnected ? 'bg-green-500/20' : 'bg-secondary'
+                    }`}>
+                      <Wifi className={`h-4 w-4 ${speaker.isAvailable ? '' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{speaker.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {speaker.ipAddress} • {speaker.isAvailable ? 'Available' : 'Offline'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                      onClick={() => networkSpeakers.removeSpeaker(speaker.id)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </>
+            )}
+
             {/* Cast Options */}
             {(isChrome || isSafari) && (
               <>
@@ -386,22 +514,48 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
 
             {/* Add Speaker for Multi-room */}
             <Separator className="my-2" />
-            <button
-              onClick={() => {
-                // Open settings or add device dialog
-                setIsOpen(false);
-              }}
-              className="w-full p-3 rounded-lg hover:bg-secondary/50 flex items-center gap-3 text-left transition-all"
-            >
-              <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-                <Plus className="h-4 w-4" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm">Add Speaker</p>
-                <p className="text-xs text-muted-foreground">Setup multi-room audio</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </button>
+            <Dialog open={addSpeakerOpen} onOpenChange={setAddSpeakerOpen}>
+              <DialogTrigger asChild>
+                <button
+                  className="w-full p-3 rounded-lg hover:bg-secondary/50 flex items-center gap-3 text-left transition-all"
+                >
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                    <Plus className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">Add Speaker</p>
+                    <p className="text-xs text-muted-foreground">Setup multi-room audio</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Network Speaker</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Speaker Name</label>
+                    <Input
+                      placeholder="Living Room Speaker"
+                      value={newSpeakerName}
+                      onChange={(e) => setNewSpeakerName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">IP Address</label>
+                    <Input
+                      placeholder="192.168.1.100"
+                      value={newSpeakerIp}
+                      onChange={(e) => setNewSpeakerIp(e.target.value)}
+                    />
+                  </div>
+                  <Button onClick={handleAddSpeaker} className="w-full">
+                    Add Speaker
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </ScrollArea>
 
