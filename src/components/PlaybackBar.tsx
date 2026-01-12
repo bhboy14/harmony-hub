@@ -3,11 +3,12 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { usePA } from "@/contexts/PAContext";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { SeekBar } from "@/components/SeekBar";
+import { useState, useEffect, useRef } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 import { CastButton } from "@/components/CastButton";
 import { 
-  Play, 
+  Play,
   Pause, 
   SkipBack, 
   SkipForward, 
@@ -138,46 +139,10 @@ export const PlaybackBar = () => {
     };
   }, [volume, musicVolume, isMuted, unified.localAudioRef, activeSource, spotify]);
 
-  // All sources now store progress/duration in milliseconds
-  const msToSeconds = (ms: number | undefined) => {
-    if (ms === undefined || isNaN(ms) || ms < 0) return 0;
-    return ms / 1000;
+  // Seek handler for SeekBar component
+  const handleSeek = async (positionMs: number) => {
+    await seek(positionMs);
   };
-
-  const formatTime = (ms: number | undefined) => {
-    const totalSeconds = Math.floor(msToSeconds(ms));
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  // Seek state management - track dragging to prevent progress sync interference
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragValue, setDragValue] = useState(0);
-  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // While dragging, show the drag position (in seconds); otherwise show actual progress (in ms, converted)
-  const displayProgress = isDragging ? dragValue : msToSeconds(progress);
-  
-  const handleSeekChange = useCallback((value: number[]) => {
-    // User is dragging - update local state immediately for responsive UI
-    setIsDragging(true);
-    setDragValue(value[0]);
-  }, []);
-  
-  const handleSeekCommit = useCallback(async (value: number[]) => {
-    // User released the slider - send the seek command
-    setIsDragging(false);
-    
-    // Clear any pending seek
-    if (seekTimeoutRef.current) {
-      clearTimeout(seekTimeoutRef.current);
-    }
-    
-    // Convert seconds back to milliseconds for the API
-    const seekTargetMs = value[0] * 1000;
-    await seek(seekTargetMs);
-  }, [seek]);
 
   const handleMicToggle = async () => {
     await pa.toggleBroadcast();
@@ -272,20 +237,13 @@ export const PlaybackBar = () => {
             </Button>
           </div>
 
-           <div className="flex items-center gap-2 w-full max-w-[600px]">
-             <span className="text-[11px] text-zinc-400 w-10 text-right tabular-nums">
-               {isDragging ? formatTime(dragValue * 1000) : formatTime(progress)}
-             </span>
-             <Slider
-               value={[displayProgress]}
-               max={msToSeconds(duration) || 100}
-               step={0.5}
-               onValueChange={handleSeekChange}
-               onValueCommit={handleSeekCommit}
-               className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2"
-             />
-             <span className="text-[11px] text-zinc-400 w-10 tabular-nums">{formatTime(duration)}</span>
-           </div>
+          <SeekBar
+            progressMs={progress}
+            durationMs={duration}
+            onSeek={handleSeek}
+            showLabels={true}
+            className="w-full max-w-[600px]"
+          />
         </div>
 
         {/* Volume/Queue/Extras */}
