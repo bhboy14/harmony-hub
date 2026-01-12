@@ -748,6 +748,39 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     setActiveSourceState(null);
   }, [spotify]);
 
+  // Listen for PA broadcast events to handle audio ducking
+  const preBroadcastStateRef = useRef<{ previousVolume: number; wasPlaying: boolean; activeSource: AudioSource } | null>(null);
+  
+  useEffect(() => {
+    const handleBroadcastStart = async (e: CustomEvent<{ musicDuckLevel: number; fadeOutDuration: number }>) => {
+      console.log('[UnifiedAudio] PA broadcast started, ducking audio');
+      const { musicDuckLevel, fadeOutDuration } = e.detail;
+      
+      if (isPlaying || activeSource) {
+        const state = await fadeAllAndPause(musicDuckLevel, fadeOutDuration);
+        preBroadcastStateRef.current = state;
+      }
+    };
+    
+    const handleBroadcastStop = async (e: CustomEvent<{ fadeInDuration: number }>) => {
+      console.log('[UnifiedAudio] PA broadcast stopped, restoring audio');
+      const { fadeInDuration } = e.detail;
+      
+      if (preBroadcastStateRef.current) {
+        await resumeAll(preBroadcastStateRef.current, fadeInDuration);
+        preBroadcastStateRef.current = null;
+      }
+    };
+    
+    window.addEventListener('pa-broadcast-start', handleBroadcastStart as EventListener);
+    window.addEventListener('pa-broadcast-stop', handleBroadcastStop as EventListener);
+    
+    return () => {
+      window.removeEventListener('pa-broadcast-start', handleBroadcastStart as EventListener);
+      window.removeEventListener('pa-broadcast-stop', handleBroadcastStop as EventListener);
+    };
+  }, [isPlaying, activeSource, fadeAllAndPause, resumeAll]);
+
   const setActiveSource = useCallback((source: AudioSource) => {
     if (source !== activeSource) {
       pauseAllExcept(source);
