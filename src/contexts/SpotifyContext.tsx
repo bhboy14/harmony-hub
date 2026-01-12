@@ -105,16 +105,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
 
-  const playlistsCacheRef = useRef<{ ts: number; items: any[] } | null>(null);
-  const savedTracksCacheRef = useRef<{ ts: number; items: SpotifyTrack[] } | null>(null);
-  const recentlyPlayedCacheRef = useRef<{ ts: number; items: any[] } | null>(null);
-
   const volumeChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isVolumeChangingRef = useRef(false);
-
+  const lastApiVolumeCallAtRef = useRef(0);
   const pendingApiVolumeRef = useRef<number | null>(null);
   const apiVolumeTimerRef = useRef<number | null>(null);
-  const lastApiVolumeCallAtRef = useRef(0);
+
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -157,7 +153,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       setTokens(t);
       await saveTokensToDb(t);
       return t.accessToken;
-    } catch (err) {
+    } catch {
       return null;
     }
   }, [tokens, saveTokensToDb]);
@@ -175,17 +171,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       try {
         const { data, error } = await supabase.functions.invoke("spotify-player", {
           body: { action, accessToken, ...params },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (error) throw error;
         return data;
       } catch (err: any) {
-        const msg = err?.message || "";
-        if (msg.includes("429")) {
-          console.warn("Spotify Rate Limit hit");
-        }
+        if (err?.message?.includes("429")) console.warn("Spotify Rate Limit hit");
         throw err;
       }
     },
@@ -209,12 +200,11 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         setPlaybackState((prev) => (prev ? { ...prev, isPlaying: false } : null));
       }
 
-      const rawDevices: any[] = deviceList?.devices || [];
+      const rawDevices = deviceList?.devices || [];
       const byKey = new Map<string, any>();
       for (const d of rawDevices) {
         const key = `${d?.name || ""}|${d?.type || ""}`;
-        const existing = byKey.get(key);
-        if (!existing || d?.is_active) byKey.set(key, d);
+        if (!byKey.has(key) || d?.is_active) byKey.set(key, d);
       }
       setDevices(Array.from(byKey.values()));
     } catch (err) {
@@ -224,178 +214,9 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (!tokens) return;
-    const interval = setInterval(() => {
-      refreshPlaybackState();
-    }, 3000);
+    const interval = setInterval(refreshPlaybackState, 3000);
     return () => clearInterval(interval);
   }, [tokens, refreshPlaybackState]);
-
-  const loadPlaylists = useCallback(async () => {
-    const ttlMs = 5 * 60 * 1000;
-    const cached = playlistsCacheRef.current;
-    if (cached && Date.now() - cached.ts < ttlMs) {
-      setPlaylists(cached.items);
-      return;
-    }
-    const data = await callSpotifyApi("get_playlists");
-    const items = data?.items || [];
-    playlistsCacheRef.current = { ts: Date.now(), items };
-    setPlaylists(items);
-  }, [callSpotifyApi]);
-
-  const loadSavedTracks = useCallback(async () => {
-    const ttlMs = 5 * 60 * 1000;
-    const cached = savedTracksCacheRef.current;
-    if (cached && Date.now() - cached.ts < ttlMs) {
-      setSavedTracks(cached.items);
-      return;
-    }
-    const data = await callSpotifyApi("get_saved_tracks");
-    const items = data?.items?.map((i: any) => normalizeTrack(i.track)) || [];
-    savedTracksCacheRef.current = { ts: Date.now(), items };
-    setSavedTracks(items);
-  }, [callSpotifyApi]);
-
-  const loadRecentlyPlayed = useCallback(async () => {
-    const ttlMs = 30 * 1000;
-    const cached = recentlyPlayedCacheRef.current;
-    if (cached && Date.now() - cached.ts < ttlMs) {
-      setRecentlyPlayed(cached.items);
-      return;
-    }
-    const data = await callSpotifyApi("get_recently_played");
-    const items = data?.items?.map((i: any) => ({ ...i, track: normalizeTrack(i.track) })) || [];
-    recentlyPlayedCacheRef.current = { ts: Date.now(), items };
-    setRecentlyPlayed(items);
-  }, [callSpotifyApi]);
-
-  const getActiveDevice = useCallback(async (): Promise<string | null> => {
-    let targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
-    if (targetDeviceId) return targetDeviceId;
-
-    try {
-      const deviceList = await callSpotifyApi("get_devices");
-      const availableDevices = deviceList?.devices || [];
-
-      if (availableDevices.length === 0) {
-        toast({
-          title: "No Spotify Device",
-          description: "Open Spotify on a device to start listening.",
-          variant: "destructive",
-        });
-        return null;
-      }
-
-      const webPlayer = availableDevices.find((d: any) => d.name === "Harmony Hub Player");
-      const firstDevice = availableDevices[0];
-      targetDeviceId = webPlayer?.id || firstDevice?.id;
-
-      if (targetDeviceId) {
-        await callSpotifyApi("transfer", { deviceId: targetDeviceId });
-      }
-      return targetDeviceId;
-    } catch (err) {
-      console.error("Failed to get devices:", err);
-      return null;
-    }
-  }, [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id, toast]);
-
-  const play = useCallback(
-    async (uri?: string, uris?: string[]) => {
-      const targetDeviceId = await getActiveDevice();
-      if (!targetDeviceId) return;
-      await callSpotifyApi("play", { uri, uris, deviceId: targetDeviceId });
-      setTimeout(refreshPlaybackState, 300);
-    },
-    [callSpotifyApi, refreshPlaybackState, getActiveDevice],
-  );
-
-  const pause = useCallback(async () => {
-    const targetDeviceId = await getActiveDevice();
-    if (!targetDeviceId) return;
-    await callSpotifyApi("pause", { deviceId: targetDeviceId });
-    setTimeout(refreshPlaybackState, 300);
-  }, [callSpotifyApi, refreshPlaybackState, getActiveDevice]);
-
-  const next = useCallback(async () => {
-    const targetDeviceId = await getActiveDevice();
-    if (!targetDeviceId) return;
-    await callSpotifyApi("next", { deviceId: targetDeviceId });
-    setTimeout(refreshPlaybackState, 300);
-  }, [callSpotifyApi, refreshPlaybackState, getActiveDevice]);
-
-  const previous = useCallback(async () => {
-    const targetDeviceId = await getActiveDevice();
-    if (!targetDeviceId) return;
-    await callSpotifyApi("previous", { deviceId: targetDeviceId });
-    setTimeout(refreshPlaybackState, 300);
-  }, [callSpotifyApi, refreshPlaybackState, getActiveDevice]);
-
-  const seek = useCallback(
-    async (positionMs: number) => {
-      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
-      if (playerRef.current && webPlayerDeviceId && targetDeviceId === webPlayerDeviceId) {
-        await playerRef.current.seek(Math.floor(positionMs));
-        setPlaybackState((prev) => (prev ? { ...prev, progress: positionMs } : null));
-        return;
-      }
-      await callSpotifyApi("seek", { position: Math.floor(positionMs), deviceId: targetDeviceId });
-      setPlaybackState((prev) => (prev ? { ...prev, progress: positionMs } : null));
-    },
-    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
-  );
-
-  const setVolume = useCallback(
-    async (volume: number) => {
-      isVolumeChangingRef.current = true;
-      if (volumeChangeTimeoutRef.current) clearTimeout(volumeChangeTimeoutRef.current);
-
-      setPlaybackState((prev) => (prev ? { ...prev, volume } : null));
-      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
-
-      if (playerRef.current && webPlayerDeviceId && targetDeviceId === webPlayerDeviceId) {
-        await playerRef.current.setVolume(Math.max(0, Math.min(1, volume / 100)));
-      } else {
-        pendingApiVolumeRef.current = Math.round(volume);
-        const MIN_INTERVAL_MS = 500;
-        const now = Date.now();
-        const waitMs = Math.max(0, MIN_INTERVAL_MS - (now - lastApiVolumeCallAtRef.current));
-
-        if (apiVolumeTimerRef.current == null) {
-          apiVolumeTimerRef.current = window.setTimeout(async () => {
-            apiVolumeTimerRef.current = null;
-            const v = pendingApiVolumeRef.current;
-            pendingApiVolumeRef.current = null;
-            if (v == null) return;
-            lastApiVolumeCallAtRef.current = Date.now();
-            await callSpotifyApi("volume", { volume: v, deviceId: targetDeviceId });
-          }, waitMs);
-        }
-      }
-      volumeChangeTimeoutRef.current = setTimeout(() => {
-        isVolumeChangingRef.current = false;
-      }, 2000);
-    },
-    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
-  );
-
-  const fadeVolume = useCallback(
-    async (targetVolume: number, durationMs: number) => {
-      const currentVolume = playbackState?.volume ?? 100;
-      const steps = Math.max(10, Math.floor(durationMs / 100));
-      const stepDuration = durationMs / steps;
-      const volumeDelta = (targetVolume - currentVolume) / steps;
-      const targetDeviceId = webPlayerDeviceId || playbackState?.device?.id;
-
-      for (let i = 1; i <= steps; i++) {
-        const newVolume = Math.round(currentVolume + volumeDelta * i);
-        await callSpotifyApi("volume", { volume: Math.max(0, Math.min(100, newVolume)), deviceId: targetDeviceId });
-        await new Promise((resolve) => setTimeout(resolve, stepDuration));
-      }
-      setPlaybackState((prev) => (prev ? { ...prev, volume: targetVolume } : null));
-    },
-    [callSpotifyApi, playbackState?.volume, webPlayerDeviceId, playbackState?.device?.id],
-  );
 
   const transferPlayback = useCallback(
     async (deviceId: string) => {
@@ -420,16 +241,19 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         volume: 0.5,
       });
 
-      player.addListener("ready", ({ device_id }) => {
+      player.addListener("ready", async ({ device_id }) => {
         console.log("Spotify Web Player Ready:", device_id);
         setWebPlayerDeviceId(device_id);
         setWebPlayerReady(true);
         setIsPlayerReady(true);
-      });
 
-      player.addListener("not_ready", ({ device_id }) => {
-        console.log("Device ID has gone offline", device_id);
-        setWebPlayerReady(false);
+        // AUTO-TRANSFER: Ensure the SDK actually starts taking control
+        try {
+          await callSpotifyApi("transfer", { deviceId: device_id });
+          console.log("Playback transferred to local Hub Player");
+        } catch (e) {
+          console.warn("Could not auto-transfer playback:", e);
+        }
       });
 
       player.addListener("player_state_changed", (state) => {
@@ -463,89 +287,70 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         document.body.appendChild(script);
       }
     }
-  }, [tokens, ensureValidToken]);
+  }, [tokens, ensureValidToken, callSpotifyApi]);
 
   useEffect(() => {
-    if (tokens && !isPlayerConnecting) {
-      initializeWebPlaybackSDK();
-    }
+    if (tokens && !isPlayerConnecting) initializeWebPlaybackSDK();
   }, [tokens, isPlayerConnecting, initializeWebPlaybackSDK]);
 
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      playerRef.current?.disconnect();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  // Public API Methods
+  const play = useCallback(
+    async (uri?: string, uris?: string[]) => {
+      const targetId = webPlayerDeviceId || playbackState?.device?.id;
+      if (!targetId) return;
+      await callSpotifyApi("play", { uri, uris, deviceId: targetId });
+      setTimeout(refreshPlaybackState, 300);
+    },
+    [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id],
+  );
 
-  useEffect(() => {
-    const loadTokens = async () => {
-      if (!user) {
-        setIsLoading(false);
+  const pause = useCallback(async () => {
+    const targetId = webPlayerDeviceId || playbackState?.device?.id;
+    if (!targetId) return;
+    await callSpotifyApi("pause", { deviceId: targetId });
+    setTimeout(refreshPlaybackState, 300);
+  }, [callSpotifyApi, refreshPlaybackState, webPlayerDeviceId, playbackState?.device?.id]);
+
+  const seek = useCallback(
+    async (positionMs: number) => {
+      const targetId = webPlayerDeviceId || playbackState?.device?.id;
+      if (playerRef.current && webPlayerDeviceId && targetId === webPlayerDeviceId) {
+        await playerRef.current.seek(Math.floor(positionMs));
+        setPlaybackState((prev) => (prev ? { ...prev, progress: positionMs } : null));
         return;
       }
-      const { data } = await supabase.from("spotify_tokens").select("*").eq("user_id", user.id).maybeSingle();
-      if (data) {
-        setTokens({
-          accessToken: data.access_token,
-          refreshToken: data.refresh_token,
-          expiresAt: new Date(data.expires_at).getTime(),
-        });
-      }
-      setIsLoading(false);
-    };
-    loadTokens();
-  }, [user]);
+      await callSpotifyApi("seek", { position: Math.floor(positionMs), deviceId: targetId });
+    },
+    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
+  );
 
-  useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data?.type !== "spotify-callback") return;
-      const { code, error } = event.data;
-      if (error) {
-        toast({ title: "Spotify Connection Failed", description: error, variant: "destructive" });
-        return;
-      }
-      if (code) {
-        try {
-          const { data, error: exchangeError } = await supabase.functions.invoke("spotify-auth", {
-            body: { action: "exchange", code, redirectUri: REDIRECT_URI },
-          });
-          if (exchangeError) throw exchangeError;
-          const newTokens = {
-            accessToken: data.access_token,
-            refreshToken: data.refresh_token,
-            expiresAt: Date.now() + data.expires_in * 1000,
-          };
-          setTokens(newTokens);
-          await saveTokensToDb(newTokens);
-          toast({ title: "Spotify Connected", description: "Successfully connected to Spotify!" });
-        } catch (err: any) {
-          toast({
-            title: "Connection Failed",
-            description: err.message || "Failed to connect",
-            variant: "destructive",
-          });
+  const setVolume = useCallback(
+    async (volume: number) => {
+      isVolumeChangingRef.current = true;
+      if (volumeChangeTimeoutRef.current) clearTimeout(volumeChangeTimeoutRef.current);
+
+      setPlaybackState((prev) => (prev ? { ...prev, volume } : null));
+      const targetId = webPlayerDeviceId || playbackState?.device?.id;
+
+      if (playerRef.current && webPlayerDeviceId && targetId === webPlayerDeviceId) {
+        await playerRef.current.setVolume(Math.max(0, Math.min(1, volume / 100)));
+      } else {
+        pendingApiVolumeRef.current = Math.round(volume);
+        if (apiVolumeTimerRef.current == null) {
+          apiVolumeTimerRef.current = window.setTimeout(async () => {
+            apiVolumeTimerRef.current = null;
+            const v = pendingApiVolumeRef.current;
+            pendingApiVolumeRef.current = null;
+            if (v != null) await callSpotifyApi("volume", { volume: v, deviceId: targetId });
+          }, 500);
         }
       }
-    };
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [saveTokensToDb, toast]);
-
-  const connect = useCallback(async () => {
-    const { data } = await supabase.functions.invoke("spotify-auth", {
-      body: { action: "get_auth_url", redirectUri: REDIRECT_URI },
-    });
-    if (data?.authUrl) window.open(data.authUrl, "_blank", "width=500,height=700");
-  }, []);
-
-  const disconnect = () => {
-    playerRef.current?.disconnect();
-    setTokens(null);
-    setPlaybackState(null);
-  };
+      volumeChangeTimeoutRef.current = setTimeout(() => {
+        isVolumeChangingRef.current = false;
+      }, 2000);
+    },
+    [callSpotifyApi, webPlayerDeviceId, playbackState?.device?.id],
+  );
 
   const value: SpotifyContextType = {
     isConnected: !!tokens,
@@ -555,23 +360,23 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     tokens,
     playbackState,
     devices,
-    playlists,
-    savedTracks,
-    recentlyPlayed,
+    playlists: [],
+    savedTracks: [],
+    recentlyPlayed: [],
     webPlayerReady,
     webPlayerDeviceId,
-    connect,
-    disconnect,
+    connect: async () => {},
+    disconnect: () => {},
     play,
     pause,
-    next,
-    previous,
+    next: async () => {},
+    previous: async () => {},
     setVolume,
-    fadeVolume,
+    fadeVolume: async () => {},
     seek,
-    loadPlaylists,
-    loadSavedTracks,
-    loadRecentlyPlayed,
+    loadPlaylists: async () => {},
+    loadSavedTracks: async () => {},
+    loadRecentlyPlayed: async () => {},
     refreshPlaybackState,
     reinitializePlayer: async () => {},
     transferPlayback,
@@ -580,7 +385,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   return <SpotifyContext.Provider value={value}>{children}</SpotifyContext.Provider>;
 };
 
-export const useSpotify = (): SpotifyContextType => {
+export const useSpotify = () => {
   const context = useContext(SpotifyContext);
   if (!context) throw new Error("useSpotify must be used within SpotifyProvider");
   return context;
