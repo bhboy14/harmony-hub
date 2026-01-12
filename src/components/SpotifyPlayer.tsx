@@ -107,7 +107,7 @@ export const SpotifyPlayer = () => {
     if (!canControl) return;
 
     // FIX: Using Type Assertion (as any) to safely access is_active
-    // If not playing and we have a device, ensure it's active
+    // This resolves the TS error while keeping the logic that wakes up your playback bar
     if (!playbackState.isPlaying && playbackState.device?.id && !(playbackState.device as any).is_active) {
       console.log("Waking up device...");
       await transferPlayback(playbackState.device.id);
@@ -133,7 +133,7 @@ export const SpotifyPlayer = () => {
   };
 
   // Filter devices for the list
-  // FIX: Cast to 'any' to avoid TS error because is_active might be missing from the interface definition
+  // FIX: Cast to 'any' to avoid TS error because is_active is missing from your interface definition
   const activeDevice = devices.find((d) => (d as any).is_active);
   const otherDevices = devices.filter((d) => !(d as any).is_active);
 
@@ -382,7 +382,7 @@ export const SpotifyPlayer = () => {
             </TabsContent>
 
             <TabsContent value="saved" className="space-y-1 pt-2">
-              {/* FIX: Type assertion (as any) on map to prevent TS errors on specific track properties if they differ from interface */}
+              {/* FIX: Type assertion (as any) on map to prevent TS errors on specific track properties */}
               {(savedTracks as any[]).slice(0, 30).map((track) => (
                 <button
                   key={track.id}
