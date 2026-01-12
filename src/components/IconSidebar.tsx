@@ -103,7 +103,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
                   onClick={() => handleNavClick(item)}
                 >
                   {item.color ? (
-                    <div className={`w-7 h-7 rounded-md flex items-center justify-center ${item.color}`}>
+                    <div className={`w-6 h-6 rounded flex items-center justify-center ${item.color}`}>
                       <Icon className="h-4 w-4 text-white" />
                     </div>
                   ) : (

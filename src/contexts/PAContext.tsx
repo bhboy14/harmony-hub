@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
-import type { AudioSource } from "@/contexts/UnifiedAudioContext";
+import { useUnifiedAudio, AudioSource } from "@/contexts/UnifiedAudioContext";
 import { useToast } from "@/hooks/use-toast";
 
 interface PAContextType {
@@ -23,6 +23,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   const [fadeOutDuration] = useState(2);
   const [autoDuck] = useState(true);
   
+  const unifiedAudio = useUnifiedAudio();
   const { toast } = useToast();
   
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -71,18 +72,6 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [isLive, updateAudioLevel]);
 
-  // Helper to get unified audio context dynamically (lazy load to avoid provider order issues)
-  const getUnifiedAudioContext = useCallback(async () => {
-    try {
-      const { useUnifiedAudio } = await import("@/contexts/UnifiedAudioContext");
-      // We can't call a hook here, so we need a different approach
-      // Instead, we'll access it through a global event system or skip ducking
-      return null;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const startBroadcast = useCallback(async () => {
     try {
       // Start mic FIRST for instant response
@@ -122,11 +111,15 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
         description: "You are now live!",
       });
       
-      // Dispatch custom event for audio ducking (UnifiedAudioContext can listen)
-      if (autoDuck) {
-        window.dispatchEvent(new CustomEvent('pa-broadcast-start', { 
-          detail: { musicDuckLevel, fadeOutDuration: fadeOutDuration * 1000 } 
-        }));
+      // Duck audio in BACKGROUND (don't await) so mic starts instantly
+      if (autoDuck && (unifiedAudio.isPlaying || unifiedAudio.activeSource)) {
+        unifiedAudio.fadeAllAndPause(musicDuckLevel, fadeOutDuration * 1000)
+          .then(state => {
+            preBroadcastStateRef.current = state;
+          })
+          .catch(err => {
+            console.warn('Could not duck audio:', err);
+          });
       }
     } catch (err) {
       console.error("Error starting broadcast:", err);
@@ -136,7 +129,7 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
         variant: "destructive"
       });
     }
-  }, [micVolume, autoDuck, musicDuckLevel, fadeOutDuration, toast]);
+  }, [micVolume, autoDuck, unifiedAudio, musicDuckLevel, fadeOutDuration, toast]);
 
   const stopBroadcast = useCallback(async () => {
     // Cancel animation frame FIRST
@@ -190,18 +183,21 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
     // Set isLive to false BEFORE restoring audio
     setIsLive(false);
     
-    // Dispatch custom event to restore audio
-    if (autoDuck) {
-      window.dispatchEvent(new CustomEvent('pa-broadcast-stop', { 
-        detail: { fadeInDuration: fadeInDuration * 1000 } 
-      }));
+    // Restore ALL audio sources
+    if (autoDuck && preBroadcastStateRef.current) {
+      try {
+        await unifiedAudio.resumeAll(preBroadcastStateRef.current, fadeInDuration * 1000);
+        preBroadcastStateRef.current = null;
+      } catch (err) {
+        console.warn('Could not restore audio:', err);
+      }
     }
     
     toast({
       title: "Broadcast Ended",
       description: "Microphone stopped. Music playback resumed.",
     });
-  }, [autoDuck, fadeInDuration, toast]);
+  }, [autoDuck, unifiedAudio, fadeInDuration, toast]);
 
   const toggleBroadcast = useCallback(async () => {
     if (isLive) {

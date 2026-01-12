@@ -2,7 +2,6 @@ import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { X, Music, Plus, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "@/components/SeekBar";
-import { SimpleAudioVisualizer } from "@/components/AudioVisualizer";
 
 interface NowPlayingPanelProps {
   isOpen: boolean;
@@ -29,16 +28,6 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
     }
   };
 
-  const getSourceGradient = (source: string | null) => {
-    switch (source) {
-      case 'spotify': return 'from-[#1DB954]/30 to-[#1DB954]/5';
-      case 'youtube': return 'from-red-500/30 to-red-500/5';
-      case 'local': return 'from-amber-500/30 to-amber-500/5';
-      case 'soundcloud': return 'from-orange-500/30 to-orange-500/5';
-      default: return 'from-primary/30 to-primary/5';
-    }
-  };
-
   return (
     <div className="w-72 sm:w-80 h-full bg-background flex flex-col border-l border-border animate-in slide-in-from-right duration-300">
       {/* Header */}
@@ -54,41 +43,13 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Album Art with Visualizer Background */}
-        <div className="relative aspect-square rounded-xl overflow-hidden shadow-lg">
-          {/* Visualizer Background */}
-          <div className={`absolute inset-0 bg-gradient-to-t ${getSourceGradient(activeSource)}`}>
-            <SimpleAudioVisualizer 
-              isActive={isPlaying} 
-              barCount={20}
-              className="opacity-60"
-            />
-          </div>
-          
-          {/* Album Art */}
-          <div className="absolute inset-4 rounded-lg overflow-hidden shadow-2xl">
-            {currentTrack?.albumArt ? (
-              <img 
-                src={currentTrack.albumArt} 
-                alt={currentTrack.title || "Album art"}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback if image fails to load
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary to-secondary/50">
-                <Music className="h-16 w-16 text-muted-foreground/50" />
-              </div>
-            )}
-          </div>
-          
-          {/* Playing indicator overlay */}
-          {isPlaying && (
-            <div className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 rounded-full bg-black/50 backdrop-blur-sm">
-              <div className={`h-2 w-2 rounded-full ${getSourceColor(activeSource)} animate-pulse`} />
-              <span className="text-[10px] text-white font-medium">Playing</span>
+        {/* Album Art */}
+        <div className="aspect-square rounded-xl overflow-hidden shadow-lg bg-secondary">
+          {currentTrack?.albumArt ? (
+            <img src={currentTrack.albumArt} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary">
+              <Music className="h-16 w-16 text-muted-foreground/50" />
             </div>
           )}
         </div>
@@ -107,8 +68,7 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
             progressMs={progress}
             durationMs={duration}
             onSeek={handleSeek}
-            showLabels={true}
-            activeSource={activeSource}
+            showLabels={false}
           />
         )}
 
