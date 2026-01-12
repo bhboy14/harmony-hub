@@ -150,13 +150,18 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
   // Build unified device list for playback
   const playbackDevices: UnifiedDevice[] = [];
 
-  // Add browser as first option
+  // Check if Spotify has an active device
+  const activeSpotifyDevice = spotify.devices?.find((d: any) => d.is_active);
+  const isSpotifyActive = !!activeSpotifyDevice;
+  const isCastingActive = casting.isCasting && !!casting.currentDevice;
+
+  // Add browser as first option - only active if nothing else is playing
   playbackDevices.push({
     id: 'browser-default',
     name: 'Lovable Browser',
     type: 'browser',
     deviceType: 'Browser',
-    isActive: !spotify.devices?.some((d: any) => d.is_active) && !casting.isCasting,
+    isActive: !isSpotifyActive && !isCastingActive,
   });
 
   // Add local audio output devices
@@ -167,7 +172,7 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
         name: device.label || 'Speaker',
         type: 'local',
         deviceType: 'Speaker',
-        isActive: device.deviceId === audioOutput.currentDeviceId,
+        isActive: device.deviceId === audioOutput.currentDeviceId && !isSpotifyActive && !isCastingActive,
       });
     });
   }
@@ -213,10 +218,14 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
     });
   });
 
-  // Add casting placeholder
-  if (casting.isCasting && casting.currentDevice) {
+  // Add casting device if actively casting
+  if (isCastingActive && casting.currentDevice) {
+    // Check if not already in the list
     const existing = playbackDevices.find(d => d.name === casting.currentDevice?.name);
-    if (!existing) {
+    if (existing) {
+      // Mark the existing one as active
+      existing.isActive = true;
+    } else {
       playbackDevices.push({
         id: `cast-${casting.currentDevice.id}`,
         name: casting.currentDevice.name,
@@ -227,8 +236,20 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
     }
   }
 
-  const hasActiveDevice = playbackDevices.some(d => d.isActive) || casting.isCasting;
-  const activeDeviceName = playbackDevices.find(d => d.isActive)?.name || casting.currentDevice?.name || 'Browser';
+  // Determine active device name with proper priority
+  let activeDeviceName = 'Browser';
+  if (isCastingActive && casting.currentDevice) {
+    activeDeviceName = casting.currentDevice.name;
+  } else if (isSpotifyActive && activeSpotifyDevice) {
+    activeDeviceName = activeSpotifyDevice.name;
+  } else {
+    const activeDevice = playbackDevices.find(d => d.isActive);
+    if (activeDevice) {
+      activeDeviceName = activeDevice.name;
+    }
+  }
+  
+  const hasActiveDevice = isSpotifyActive || isCastingActive || playbackDevices.some(d => d.isActive);
 
   const getDeviceIcon = (device: UnifiedDevice) => {
     if (device.type === 'browser') return <Globe className="h-4 w-4" />;
