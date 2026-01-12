@@ -107,7 +107,7 @@ export const SpotifyPlayer = () => {
     if (!canControl) return;
 
     // If not playing and we have a device, ensure it's active
-    if (!playbackState.isPlaying && playbackState.device?.id && !playbackState.device.is_active) {
+    if (!playbackState.isPlaying && playbackState.device?.id && !(playbackState.device as any).is_active) {
       console.log("Waking up device...");
       await transferPlayback(playbackState.device.id);
     }
@@ -132,8 +132,9 @@ export const SpotifyPlayer = () => {
   };
 
   // Filter devices for the list
-  const activeDevice = devices.find((d) => d.is_active);
-  const otherDevices = devices.filter((d) => !d.is_active);
+  // FIX: Cast to 'any' to avoid TS error if is_active is missing from interface
+  const activeDevice = devices.find((d) => (d as any).is_active);
+  const otherDevices = devices.filter((d) => !(d as any).is_active);
 
   if (!isConnected) {
     return (
@@ -158,10 +159,8 @@ export const SpotifyPlayer = () => {
   }
 
   // Robust artwork check
-  const currentImage =
-    playbackState?.track?.albumArt ||
-    playbackState?.track?.album?.images?.[0]?.url ||
-    playbackState?.track?.images?.[0]?.url;
+  // FIX: Removed invalid .images check on track root
+  const currentImage = playbackState?.track?.albumArt || playbackState?.track?.album?.images?.[0]?.url;
 
   return (
     <Card className="glass-panel h-full flex flex-col overflow-hidden relative">
@@ -310,6 +309,7 @@ export const SpotifyPlayer = () => {
               {/* A: Lovable Browser */}
               <button
                 onClick={() => {
+                  // Search for the web player device (often named Web Player or similar in the list)
                   const webDevice = devices.find((d) => d.type === "Computer" || d.name.toLowerCase().includes("web"));
                   if (webDevice) transferPlayback(webDevice.id);
                 }}
