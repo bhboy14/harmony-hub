@@ -6,6 +6,7 @@ import { useUnifiedQueue, QueueTrack } from "@/hooks/useUnifiedQueue";
 import { useGaplessPlayback } from "@/hooks/useGaplessPlayback";
 import { usePlaybackSync } from "@/hooks/usePlaybackSync";
 import { useAuth } from "@/contexts/AuthContext";
+
 export type AudioSource = "spotify" | "local" | "youtube" | "soundcloud" | "pa" | null;
 
 export interface UnifiedTrack {
@@ -79,6 +80,9 @@ interface UnifiedAudioContextType {
   // Sync state
   isSyncing: boolean;
   connectedDevices: number;
+  
+  // Broadcast sync state change
+  broadcastPlaybackState: (action: 'play' | 'pause' | 'seek' | 'track_change') => void;
 }
 
 export interface LocalTrackInfo {
@@ -105,7 +109,7 @@ export interface PlayableTrack {
 const UnifiedAudioContext = createContext<UnifiedAudioContextType | null>(null);
 
 // Cross-fade duration in ms
-const CROSSFADE_DURATION = 300;
+const CROSSFADE_DURATION = 500;
 
 export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const spotify = useSpotify();
@@ -181,6 +185,43 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       }
     }, [isPlaying, activeSource]),
   });
+
+  // Broadcast playback state to sync across devices
+  const broadcastPlaybackState = useCallback((action: 'play' | 'pause' | 'seek' | 'track_change') => {
+    const track = (() => {
+      switch (activeSource) {
+        case 'local':
+          if (localTrack) {
+            return {
+              id: localTrack.id,
+              title: localTrack.title,
+              artist: localTrack.artist,
+              albumArt: localTrack.albumArt,
+              duration: duration,
+              source: 'local' as AudioSource,
+            };
+          }
+          return null;
+        case 'spotify':
+          if (spotify.playbackState?.track) {
+            const t = spotify.playbackState.track;
+            return {
+              id: t.id,
+              title: t.name,
+              artist: t.artists.map((a: any) => a.name).join(", "),
+              albumArt: t.album.images[0]?.url,
+              duration: t.duration_ms,
+              source: 'spotify' as AudioSource,
+            };
+          }
+          return null;
+        default:
+          return null;
+      }
+    })();
+
+    broadcastState(isPlaying, progress, duration, track, activeSource, action);
+  }, [activeSource, localTrack, duration, isPlaying, progress, spotify.playbackState, broadcastState]);
 
   // Initialize local audio element with robust error handling
   useEffect(() => {
@@ -420,13 +461,29 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [activeSource, spotify.playbackState]);
 
-  // NOTE: Don't auto-switch away from local playback based on possibly-stale Spotify state.
-  // Only mark Spotify as active if nothing else is active.
-  useEffect(() => {
-    if (spotify.playbackState?.isPlaying && activeSource == null) {
-      setActiveSourceState('spotify');
-    }
-  }, [spotify.playbackState?.isPlaying, activeSource]);
+  // Crossfade helper - fade out audio element
+  const fadeOutAudio = useCallback(async (audio: HTMLAudioElement): Promise<void> => {
+    return new Promise((resolve) => {
+      const steps = 10;
+      const stepDuration = CROSSFADE_DURATION / 2 / steps;
+      const startVolume = audio.volume;
+      const volumeStep = startVolume / steps;
+      let currentStep = 0;
+
+      const fadeInterval = setInterval(() => {
+        currentStep++;
+        audio.volume = Math.max(0, startVolume - volumeStep * currentStep);
+
+        if (currentStep >= steps) {
+          clearInterval(fadeInterval);
+          audio.pause();
+          audio.currentTime = 0;
+          audio.volume = 0;
+          resolve();
+        }
+      }, stepDuration);
+    });
+  }, []);
 
   // Stop all audio sources with cross-fade
   const stopAllSources = useCallback(async () => {
@@ -435,15 +492,25 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       clearTimeout(crossfadeTimeoutRef.current);
     }
 
-    // Immediate stop without fade for quick switching
-    if (localAudioRef.current) {
+    const fadePromises: Promise<void>[] = [];
+
+    // Fade out local audio if playing
+    if (localAudioRef.current && !localAudioRef.current.paused) {
+      fadePromises.push(fadeOutAudio(localAudioRef.current));
+    } else if (localAudioRef.current) {
       localAudioRef.current.pause();
       localAudioRef.current.currentTime = 0;
     }
-    if (soundcloudAudioRef.current) {
+
+    // Fade out SoundCloud if playing
+    if (soundcloudAudioRef.current && !soundcloudAudioRef.current.paused) {
+      fadePromises.push(fadeOutAudio(soundcloudAudioRef.current));
+    } else if (soundcloudAudioRef.current) {
       soundcloudAudioRef.current.pause();
       soundcloudAudioRef.current.currentTime = 0;
     }
+
+    // Stop YouTube immediately
     if (youtubePlayerRef.current?.pauseVideo) {
       try {
         youtubePlayerRef.current.pauseVideo();
@@ -453,14 +520,21 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // IMPORTANT: Spotify commands can fail when there's no active device.
-    // Don't let that break switching to local/YouTube/SoundCloud.
-    // Also, keep this fire-and-forget to avoid blocking user-gesture playback.
+    // Fire-and-forget to avoid blocking.
     if (spotify.playbackState?.isPlaying) {
       void spotify.pause().catch(() => {
         // ignore
       });
     }
-  }, [spotify]);
+
+    // Wait for fade outs to complete
+    if (fadePromises.length > 0) {
+      await Promise.all(fadePromises);
+    }
+    
+    // Reset playing state
+    setIsPlaying(false);
+  }, [spotify, fadeOutAudio]);
 
   // Pause all sources except specified one
   const pauseAllExcept = useCallback(async (except: AudioSource) => {
@@ -1217,6 +1291,7 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
         // Sync state
         isSyncing,
         connectedDevices,
+        broadcastPlaybackState,
       }}
     >
       {children}
