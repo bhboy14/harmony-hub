@@ -53,8 +53,6 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useAudioOutput } from "@/hooks/useAudioOutput";
 import { useNetworkSpeakers } from "@/hooks/useNetworkSpeakers";
 import { useRecordingDevices } from "@/hooks/useRecordingDevices";
-import { useStationUnlock } from "@/hooks/useStationUnlock";
-import { useToast } from "@/hooks/use-toast";
 
 interface DevicePanelProps {
   variant?: "default" | "ghost" | "outline";
@@ -94,8 +92,6 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
   const audioOutput = useAudioOutput();
   const networkSpeakers = useNetworkSpeakers({ enabled: true });
   const recordingDevices = useRecordingDevices();
-  const stationUnlock = useStationUnlock();
-  const { toast } = useToast();
 
   // Browser capabilities
   const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
@@ -385,52 +381,6 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
 
       <ScrollArea className="max-h-[60vh]">
         <div className="p-2 space-y-2">
-          {/* Unlock Station Banner - only show when needed */}
-          {stationUnlock.needsUnlock && (
-            <div className="p-3 mx-2 rounded-lg bg-primary/10 border border-primary/20">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Volume2 className="h-5 w-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-sm">Enable Audio</p>
-                  <p className="text-xs text-muted-foreground">
-                    Tap to enable audio sync & mic access
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={async () => {
-                  const success = await stationUnlock.unlockStation();
-                  if (success) {
-                    toast({
-                      title: "Audio Enabled",
-                      description: "Your device is now ready for sync",
-                    });
-                    // Refresh device lists
-                    audioOutput.refreshDevices();
-                    recordingDevices.refresh();
-                  }
-                }}
-                disabled={stationUnlock.isUnlocking}
-                className="w-full gap-2"
-                size="sm"
-              >
-                {stationUnlock.isUnlocking ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Enabling...
-                  </>
-                ) : (
-                  <>
-                    <Volume2 className="h-4 w-4" />
-                    Unlock Station
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-
           {/* Currently Casting */}
           {casting.isCasting && casting.currentDevice && (
             <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 mx-2">
