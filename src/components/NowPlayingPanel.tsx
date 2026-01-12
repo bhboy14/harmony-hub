@@ -1,8 +1,7 @@
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { X, Music, Plus, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { useState, useCallback, useRef } from "react";
+import { SeekBar } from "@/components/SeekBar";
 
 interface NowPlayingPanelProps {
   isOpen: boolean;
@@ -12,47 +11,11 @@ interface NowPlayingPanelProps {
 export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
   const { currentTrack, activeSource, isPlaying, progress, duration, seek } = useUnifiedAudio();
 
-  // Seek state management - track dragging to prevent progress sync interference
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragValue, setDragValue] = useState(0);
-  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   if (!isOpen) return null;
 
-  // All sources store progress/duration in milliseconds
-  const msToSeconds = (ms: number | undefined) => {
-    if (ms === undefined || isNaN(ms) || ms < 0) return 0;
-    return ms / 1000;
-  };
-
-  const formatTime = (ms: number | undefined) => {
-    const totalSeconds = Math.floor(msToSeconds(ms));
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // While dragging, show the drag position (in seconds); otherwise show actual progress (in ms, converted)
-  const displayProgress = isDragging ? dragValue : msToSeconds(progress);
-
-  const handleSeekChange = (value: number[]) => {
-    // User is dragging - update local state immediately for responsive UI
-    setIsDragging(true);
-    setDragValue(value[0]);
-  };
-
-  const handleSeekCommit = async (value: number[]) => {
-    // User released the slider - send the seek command
-    setIsDragging(false);
-    
-    // Clear any pending seek
-    if (seekTimeoutRef.current) {
-      clearTimeout(seekTimeoutRef.current);
-    }
-    
-    // Convert seconds back to milliseconds for the API
-    const seekTargetMs = value[0] * 1000;
-    await seek(seekTargetMs);
+  // Seek handler for SeekBar component
+  const handleSeek = async (positionMs: number) => {
+    await seek(positionMs);
   };
 
   const getSourceColor = (source: string | null) => {
@@ -101,20 +64,12 @@ export const NowPlayingPanel = ({ isOpen, onClose }: NowPlayingPanelProps) => {
 
         {/* Progress with Seek Slider */}
         {currentTrack && (
-          <div className="space-y-2">
-            <Slider
-              value={[displayProgress]}
-              max={msToSeconds(duration) || 100}
-              step={0.5}
-              onValueChange={handleSeekChange}
-              onValueCommit={handleSeekCommit}
-              className="cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{isDragging ? formatTime(dragValue * 1000) : formatTime(progress)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-          </div>
+          <SeekBar
+            progressMs={progress}
+            durationMs={duration}
+            onSeek={handleSeek}
+            showLabels={false}
+          />
         )}
 
         {/* Actions */}
