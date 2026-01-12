@@ -106,6 +106,7 @@ export const SpotifyPlayer = () => {
   const handlePlayPause = async () => {
     if (!canControl) return;
 
+    // FIX: Using Type Assertion (as any) to safely access is_active
     // If not playing and we have a device, ensure it's active
     if (!playbackState.isPlaying && playbackState.device?.id && !(playbackState.device as any).is_active) {
       console.log("Waking up device...");
@@ -132,7 +133,7 @@ export const SpotifyPlayer = () => {
   };
 
   // Filter devices for the list
-  // FIX: Cast to 'any' to avoid TS error if is_active is missing from interface
+  // FIX: Cast to 'any' to avoid TS error because is_active might be missing from the interface definition
   const activeDevice = devices.find((d) => (d as any).is_active);
   const otherDevices = devices.filter((d) => !(d as any).is_active);
 
@@ -159,7 +160,7 @@ export const SpotifyPlayer = () => {
   }
 
   // Robust artwork check
-  // FIX: Removed invalid .images check on track root
+  // FIX: Removed invalid .images check on the track root which caused the build error
   const currentImage = playbackState?.track?.albumArt || playbackState?.track?.album?.images?.[0]?.url;
 
   return (
@@ -357,6 +358,7 @@ export const SpotifyPlayer = () => {
               {playlists.map((playlist) => (
                 <button
                   key={playlist.id}
+                  // FIX: Ensure play function gets a valid context URI string
                   onClick={() => canControl && play(`spotify:playlist:${playlist.id}`)}
                   className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-secondary/40 text-left group"
                 >
@@ -380,15 +382,18 @@ export const SpotifyPlayer = () => {
             </TabsContent>
 
             <TabsContent value="saved" className="space-y-1 pt-2">
-              {savedTracks.slice(0, 30).map((track) => (
+              {/* FIX: Type assertion (as any) on map to prevent TS errors on specific track properties if they differ from interface */}
+              {(savedTracks as any[]).slice(0, 30).map((track) => (
                 <button
                   key={track.id}
+                  // FIX: Ensure correct arguments are passed to play (undefined context, but specific track URI array)
                   onClick={() => canControl && play(undefined, [track.uri])}
                   className="w-full flex items-center gap-2 p-2 rounded-md hover:bg-secondary/40 text-left group"
                 >
-                  {track.albumArt ? (
+                  {/* FIX: Checked for track.album.images fallback correctly */}
+                  {track.albumArt || track.album?.images?.[0]?.url ? (
                     <img
-                      src={track.albumArt}
+                      src={track.albumArt || track.album?.images?.[0]?.url}
                       className="w-8 h-8 rounded object-cover opacity-80 group-hover:opacity-100"
                     />
                   ) : (
@@ -398,7 +403,7 @@ export const SpotifyPlayer = () => {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{track.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{track.artists[0]?.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{track.artists?.[0]?.name}</p>
                   </div>
                 </button>
               ))}
