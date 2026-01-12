@@ -94,38 +94,64 @@ export const useAudioOutput = (options: UseAudioOutputOptions = {}) => {
     };
   }, [isSupported, refreshDevices]);
 
-  // Set audio output device
+  // Set audio output device - try multiple audio elements
   const setOutputDevice = useCallback(async (deviceId: string) => {
-    const audio = audioElementRef.current as any;
-    if (!audio || typeof audio.setSinkId !== 'function') {
+    // Try the provided audio element first
+    let audio = audioElementRef.current as any;
+    
+    // If no audio element provided, try to find all audio/video elements in the page
+    if (!audio) {
+      const allAudioElements = [
+        ...document.querySelectorAll('audio'),
+        ...document.querySelectorAll('video')
+      ];
+      audio = allAudioElements[0] as any;
+    }
+    
+    // Check if setSinkId is supported at all
+    const testAudio = document.createElement('audio') as any;
+    if (typeof testAudio.setSinkId !== 'function') {
       toast({
-        title: "Not Supported",
-        description: "Audio output selection is not supported in your browser",
+        title: "Browser Limitation",
+        description: "Your browser doesn't support audio output selection. Try Chrome or Edge.",
         variant: "destructive",
       });
       return false;
     }
 
-    try {
-      await audio.setSinkId(deviceId);
+    // If we have an audio element, set its sink
+    if (audio && typeof audio.setSinkId === 'function') {
+      try {
+        await audio.setSinkId(deviceId);
+        setCurrentDeviceId(deviceId);
+        
+        const device = devices.find(d => d.deviceId === deviceId);
+        toast({
+          title: "Audio Output Changed",
+          description: `Now playing through ${device?.label || 'Selected device'}`,
+        });
+        
+        console.log('[AudioOutput] Set output to:', deviceId);
+        return true;
+      } catch (err) {
+        console.error('[AudioOutput] Failed to set output device:', err);
+        toast({
+          title: "Failed to Change Output",
+          description: "Could not switch to the selected audio device. Make sure audio is playing.",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } else {
+      // No active audio element - just update the preference
       setCurrentDeviceId(deviceId);
-      
       const device = devices.find(d => d.deviceId === deviceId);
       toast({
-        title: "Audio Output Changed",
-        description: `Now playing through ${device?.label || 'Selected device'}`,
+        title: "Output Device Selected",
+        description: `${device?.label || 'Device'} will be used when audio starts playing.`,
       });
-      
-      console.log('[AudioOutput] Set output to:', deviceId);
+      console.log('[AudioOutput] Saved preference for device:', deviceId);
       return true;
-    } catch (err) {
-      console.error('[AudioOutput] Failed to set output device:', err);
-      toast({
-        title: "Failed to Change Output",
-        description: "Could not switch to the selected audio device",
-        variant: "destructive",
-      });
-      return false;
     }
   }, [devices, toast]);
 
@@ -133,11 +159,8 @@ export const useAudioOutput = (options: UseAudioOutputOptions = {}) => {
   const showOutputPicker = useCallback(async () => {
     const mediaDevices = navigator.mediaDevices as any;
     if (typeof mediaDevices?.selectAudioOutput !== 'function') {
-      toast({
-        title: "Not Supported",
-        description: "Audio output picker is not available in your browser. Try Chrome or Edge.",
-        variant: "destructive",
-      });
+      // Don't show error - just return null and let the caller handle it
+      console.log('[AudioOutput] selectAudioOutput not supported in this browser');
       return null;
     }
 
