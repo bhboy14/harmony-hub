@@ -7,8 +7,6 @@ import { SeekBar } from "@/components/SeekBar";
 import { useState, useEffect, useRef } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
 import { DevicePanel } from "@/components/DevicePanel";
-import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { useAudioDucking } from "@/hooks/useAudioDucking";
 import { 
   Play,
   Pause, 
@@ -26,8 +24,7 @@ import {
   Sliders,
   Radio,
   Music,
-  Volume1,
-  Keyboard
+  Volume1
 } from "lucide-react";
 import {
   Tooltip,
@@ -42,7 +39,6 @@ import {
 } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 // Channel volumes stored in localStorage for persistence
 const loadMixerSettings = () => {
@@ -59,12 +55,6 @@ export const PlaybackBar = () => {
   const pa = usePA();
   const [queueOpen, setQueueOpen] = useState(false);
   const [mixerOpen, setMixerOpen] = useState(false);
-  
-  // Keyboard shortcuts (Space=Play/Pause, Arrows=Seek)
-  const { shortcuts } = useKeyboardShortcuts({ enabled: true });
-  
-  // Audio ducking during TTS/Voice announcements
-  const { isDucking } = useAudioDucking({ enabled: true, duckingLevel: 20 });
   
   // Channel volumes with localStorage persistence
   const [mixerSettings, setMixerSettings] = useState(loadMixerSettings);
