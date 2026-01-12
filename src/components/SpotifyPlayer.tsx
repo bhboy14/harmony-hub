@@ -133,8 +133,6 @@ export const SpotifyPlayer = () => {
 
   // Filter devices for the list
   const activeDevice = devices.find((d) => d.is_active);
-  // Filter out the active device from the list so it doesn't duplicate if desired,
-  // or keep all. Logic below keeps "Other" devices separate.
   const otherDevices = devices.filter((d) => !d.is_active);
 
   if (!isConnected) {
@@ -312,7 +310,6 @@ export const SpotifyPlayer = () => {
               {/* A: Lovable Browser */}
               <button
                 onClick={() => {
-                  // Search for the web player device (often named Web Player or similar in the list)
                   const webDevice = devices.find((d) => d.type === "Computer" || d.name.toLowerCase().includes("web"));
                   if (webDevice) transferPlayback(webDevice.id);
                 }}
