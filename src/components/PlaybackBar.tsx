@@ -176,18 +176,40 @@ export const PlaybackBar = () => {
       <div className="h-full grid grid-cols-3 items-center">
         {/* Track Info */}
         <div className="flex items-center gap-3 min-w-0">
-          {currentTrack && (
+          {currentTrack ? (
             <>
-              <img
-                src={currentTrack.albumArt || ""}
-                className="w-14 h-14 rounded shadow-lg object-cover bg-zinc-800"
-                alt=""
-              />
+              <div className="w-14 h-14 rounded shadow-lg overflow-hidden bg-zinc-800 flex-shrink-0">
+                {currentTrack.albumArt ? (
+                  <img
+                    src={currentTrack.albumArt}
+                    className="w-full h-full object-cover"
+                    alt={currentTrack.title}
+                    onError={(e) => {
+                      // Hide broken image and show fallback
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-700 to-zinc-800">
+                    <Music className="h-6 w-6 text-zinc-500" />
+                  </div>
+                )}
+              </div>
               <div className="min-w-0">
                 <p className="font-medium text-white truncate text-sm">{currentTrack.title}</p>
                 <p className="text-xs text-zinc-400 truncate">{currentTrack.artist}</p>
               </div>
             </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded shadow-lg bg-zinc-800 flex items-center justify-center">
+                <Music className="h-6 w-6 text-zinc-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-zinc-500 text-sm">No track playing</p>
+                <p className="text-xs text-zinc-600">Select a track to start</p>
+              </div>
+            </div>
           )}
         </div>
 
