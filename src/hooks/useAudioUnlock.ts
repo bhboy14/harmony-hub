@@ -20,41 +20,74 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
   const { onUnlock } = options;
   const [isLocked, setIsLocked] = useState(false);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const silentAudioRef = useRef<HTMLAudioElement | null>(null);
   const hasUnlockedRef = useRef(false);
+  const onUnlockRef = useRef(onUnlock);
 
-  // Detect iOS/Safari
+  // Keep callback ref updated
+  useEffect(() => {
+    onUnlockRef.current = onUnlock;
+  }, [onUnlock]);
+
+  // Detect iOS/Safari - run once on mount
   useEffect(() => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     
-    setIsIOSDevice(isIOS || (isSafari && isMobile));
+    const needsUnlock = isIOS || (isSafari && isMobile);
+    setIsIOSDevice(needsUnlock);
+    
+    // Only proceed with AudioContext if on iOS/mobile Safari
+    if (!needsUnlock) {
+      setIsInitialized(true);
+      return;
+    }
+
+    // Check if we already unlocked in this session
+    const wasUnlocked = sessionStorage.getItem('audioUnlocked') === 'true';
+    if (wasUnlocked) {
+      hasUnlockedRef.current = true;
+      setIsLocked(false);
+      setIsInitialized(true);
+      return;
+    }
     
     // Create AudioContext to check state
+    let audioContext: AudioContext | null = null;
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioContextClass) {
-        audioContextRef.current = new AudioContextClass();
+        audioContext = new AudioContextClass();
+        audioContextRef.current = audioContext;
         
-        // Check if AudioContext is suspended (locked)
-        if (audioContextRef.current.state === 'suspended') {
+        // Check initial state - only set locked if truly suspended
+        const initialState = audioContext.state;
+        console.log('[AudioUnlock] Initial AudioContext state:', initialState);
+        
+        if (initialState === 'suspended') {
           setIsLocked(true);
+        } else if (initialState === 'running') {
+          // Already running, mark as unlocked
+          hasUnlockedRef.current = true;
+          sessionStorage.setItem('audioUnlocked', 'true');
         }
         
         // Listen for state changes
-        audioContextRef.current.onstatechange = () => {
-          if (audioContextRef.current?.state === 'running') {
+        audioContext.onstatechange = () => {
+          const state = audioContextRef.current?.state;
+          console.log('[AudioUnlock] AudioContext state changed to:', state);
+          
+          if (state === 'running' && !hasUnlockedRef.current) {
+            hasUnlockedRef.current = true;
             setIsLocked(false);
-            if (!hasUnlockedRef.current) {
-              hasUnlockedRef.current = true;
-              onUnlock?.();
-            }
-          } else if (audioContextRef.current?.state === 'suspended') {
-            setIsLocked(true);
+            sessionStorage.setItem('audioUnlocked', 'true');
+            onUnlockRef.current?.();
           }
+          // Don't set locked again once unlocked - the session is good
         };
       }
     } catch (error) {
@@ -62,59 +95,40 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
     }
 
     // Create a silent audio element for unlocking
-    silentAudioRef.current = new Audio();
-    silentAudioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-    silentAudioRef.current.preload = 'auto';
-    silentAudioRef.current.volume = 0.001; // Near-silent
+    const silentAudio = new Audio();
+    silentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    silentAudio.preload = 'auto';
+    silentAudio.volume = 0.001;
+    silentAudioRef.current = silentAudio;
+    
+    setIsInitialized(true);
 
     return () => {
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-        audioContextRef.current.close();
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close().catch(() => {});
       }
       silentAudioRef.current = null;
     };
-  }, [onUnlock]);
-
-  // Check lock state periodically on iOS (AudioContext can get suspended)
-  useEffect(() => {
-    if (!isIOSDevice) return;
-
-    const checkLockState = () => {
-      if (audioContextRef.current?.state === 'suspended' && !hasUnlockedRef.current) {
-        setIsLocked(true);
-      }
-    };
-
-    // Check on visibility change (user switches tabs)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        checkLockState();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    // Initial check after a short delay
-    const timer = setTimeout(checkLockState, 500);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearTimeout(timer);
-    };
-  }, [isIOSDevice]);
+  }, []);
 
   /**
    * Unlock audio playback on iOS/Safari.
    * This must be called from a user gesture (click/touch).
    */
   const unlockAudio = useCallback(async (): Promise<boolean> => {
+    // Already unlocked
+    if (hasUnlockedRef.current) {
+      setIsLocked(false);
+      return true;
+    }
+
     try {
       console.log('[AudioUnlock] Attempting to unlock audio...');
       
       // Step 1: Resume AudioContext
       if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
-        console.log('[AudioUnlock] AudioContext resumed');
+        console.log('[AudioUnlock] AudioContext resumed, state:', audioContextRef.current.state);
       }
 
       // Step 2: Play silent audio (iOS unlock trick)
@@ -133,14 +147,18 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
 
       // Step 3: Create and play an oscillator (belt and suspenders approach)
       if (audioContextRef.current && audioContextRef.current.state === 'running') {
-        const oscillator = audioContextRef.current.createOscillator();
-        const gainNode = audioContextRef.current.createGain();
-        gainNode.gain.value = 0; // Silent
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContextRef.current.destination);
-        oscillator.start(0);
-        oscillator.stop(audioContextRef.current.currentTime + 0.001);
-        console.log('[AudioUnlock] Oscillator played');
+        try {
+          const oscillator = audioContextRef.current.createOscillator();
+          const gainNode = audioContextRef.current.createGain();
+          gainNode.gain.value = 0; // Silent
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContextRef.current.destination);
+          oscillator.start(0);
+          oscillator.stop(audioContextRef.current.currentTime + 0.001);
+          console.log('[AudioUnlock] Oscillator played');
+        } catch (e) {
+          console.warn('[AudioUnlock] Oscillator failed:', e);
+        }
       }
 
       // Step 4: Try to unlock any existing audio elements on the page
@@ -158,7 +176,6 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
           mediaEl.muted = wasMuted;
           mediaEl.volume = wasVolume;
         } catch (e) {
-          // Restore original state if play failed
           mediaEl.muted = wasMuted;
           mediaEl.volume = wasVolume;
         }
@@ -167,7 +184,8 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
       // Mark as unlocked
       hasUnlockedRef.current = true;
       setIsLocked(false);
-      onUnlock?.();
+      sessionStorage.setItem('audioUnlocked', 'true');
+      onUnlockRef.current?.();
       
       console.log('[AudioUnlock] Audio successfully unlocked');
       return true;
@@ -175,10 +193,13 @@ export const useAudioUnlock = (options: UseAudioUnlockOptions = {}): UseAudioUnl
       console.error('[AudioUnlock] Failed to unlock audio:', error);
       return false;
     }
-  }, [onUnlock]);
+  }, []);
+
+  // Don't report locked state until initialized
+  const effectiveIsLocked = isInitialized && isLocked && !hasUnlockedRef.current;
 
   return {
-    isLocked,
+    isLocked: effectiveIsLocked,
     isIOSDevice,
     unlockAudio,
     audioContext: audioContextRef.current,
