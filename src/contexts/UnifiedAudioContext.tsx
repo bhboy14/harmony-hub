@@ -4,6 +4,8 @@ import { useSoundCloud } from "@/contexts/SoundCloudContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUnifiedQueue, QueueTrack } from "@/hooks/useUnifiedQueue";
 import { useGaplessPlayback } from "@/hooks/useGaplessPlayback";
+import { usePlaybackSync } from "@/hooks/usePlaybackSync";
+import { useAuth } from "@/contexts/AuthContext";
 export type AudioSource = "spotify" | "local" | "youtube" | "soundcloud" | "pa" | null;
 
 export interface UnifiedTrack {
@@ -73,6 +75,10 @@ interface UnifiedAudioContextType {
   playQueueTrack: (index: number) => Promise<void>;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+  
+  // Sync state
+  isSyncing: boolean;
+  connectedDevices: number;
 }
 
 export interface LocalTrackInfo {
@@ -105,6 +111,7 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const spotify = useSpotify();
   const soundcloud = useSoundCloud();
   const { toast } = useToast();
+  const { user } = useAuth();
   
   // Queue management
   const queueManager = useUnifiedQueue();
@@ -146,6 +153,35 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
       console.log('[Gapless] Next track ready for seamless transition');
     },
   });
+
+  // Playback sync across devices
+  const { isSyncing, connectedDevices, broadcastState } = usePlaybackSync({
+    enabled: !!user,
+    onRemoteStateChange: useCallback((state, action) => {
+      console.log('[Sync] Received remote state change:', action, state);
+      // Handle remote state changes - sync to this device
+      if (action === 'play' && !isPlaying) {
+        // Remote started playing
+        if (localAudioRef.current && activeSource === 'local') {
+          localAudioRef.current.play();
+          setIsPlaying(true);
+        }
+      } else if (action === 'pause' && isPlaying) {
+        // Remote paused
+        if (localAudioRef.current && activeSource === 'local') {
+          localAudioRef.current.pause();
+          setIsPlaying(false);
+        }
+      } else if (action === 'seek' && state.progressMs !== undefined) {
+        // Remote seeked
+        if (localAudioRef.current && activeSource === 'local') {
+          localAudioRef.current.currentTime = state.progressMs / 1000;
+          setProgress(state.progressMs);
+        }
+      }
+    }, [isPlaying, activeSource]),
+  });
+
   // Initialize local audio element with robust error handling
   useEffect(() => {
     localAudioRef.current = new Audio();
@@ -1178,6 +1214,9 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
         playQueueTrack,
         toggleShuffle: queueManager.toggleShuffle,
         toggleRepeat: queueManager.toggleRepeat,
+        // Sync state
+        isSyncing,
+        connectedDevices,
       }}
     >
       {children}
