@@ -48,19 +48,13 @@ export const useAudioOutput = (options: UseAudioOutputOptions = {}) => {
     }
   }, [audioElement]);
 
-  // Enumerate audio output devices
+  // Enumerate audio output devices (NO permission prompt - passive only)
   const refreshDevices = useCallback(async () => {
     if (!isSupported) return;
 
     try {
-      // Request microphone permission first to get device labels
-      // (browsers require some media permission to show device labels)
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch {
-        // Permission denied or not available - continue anyway
-      }
-
+      // DO NOT request getUserMedia here - it causes flashing permission prompts
+      // Just enumerate what we can see
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const outputDevices = allDevices
         .filter(device => device.kind === 'audiooutput')

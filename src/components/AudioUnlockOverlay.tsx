@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAudioUnlock } from "@/hooks/useAudioUnlock";
+import { useStationUnlock } from "@/hooks/useStationUnlock";
 import { Button } from "@/components/ui/button";
 import { Volume2, VolumeX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -17,9 +17,8 @@ interface AudioUnlockOverlayProps {
 export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayProps) => {
   const { toast } = useToast();
   const [isDismissed, setIsDismissed] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false);
   
-  const { isLocked, isIOSDevice, unlockAudio } = useAudioUnlock({
+  const { needsUnlock, isIOSDevice, isUnlocking, unlockStation } = useStationUnlock({
     onUnlock: () => {
       toast({
         title: "Audio Enabled",
@@ -29,15 +28,13 @@ export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayPr
     },
   });
 
-  // Don't show if not on iOS, not locked, or dismissed
-  if (!isIOSDevice || !isLocked || isDismissed) {
+  // Don't show if not needed, not on iOS, or dismissed
+  if (!isIOSDevice || !needsUnlock || isDismissed) {
     return null;
   }
 
   const handleUnlock = async () => {
-    setIsUnlocking(true);
-    const success = await unlockAudio();
-    setIsUnlocking(false);
+    const success = await unlockStation();
     
     if (success) {
       setIsDismissed(true);
@@ -101,16 +98,16 @@ export const AudioUnlockOverlay = ({ onUnlock, className }: AudioUnlockOverlayPr
  * Can be placed in the playback bar or header.
  */
 export const AudioBlockedBadge = ({ className }: { className?: string }) => {
-  const { isLocked, isIOSDevice, unlockAudio } = useAudioUnlock();
+  const { needsUnlock, isIOSDevice, unlockStation } = useStationUnlock();
   const { toast } = useToast();
 
-  // Don't show if not on iOS or not locked
-  if (!isLocked || !isIOSDevice) {
+  // Don't show if not needed or not on iOS
+  if (!needsUnlock || !isIOSDevice) {
     return null;
   }
 
   const handleClick = async () => {
-    const success = await unlockAudio();
+    const success = await unlockStation();
     if (success) {
       toast({
         title: "Audio Enabled",
