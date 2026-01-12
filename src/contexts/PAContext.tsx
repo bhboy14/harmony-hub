@@ -132,24 +132,56 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
   }, [micVolume, autoDuck, unifiedAudio, musicDuckLevel, fadeOutDuration, toast]);
 
   const stopBroadcast = useCallback(async () => {
-    // Cancel animation frame
+    // Cancel animation frame FIRST
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
     
+    // Disconnect and clear gain node
+    if (gainNodeRef.current) {
+      try {
+        gainNodeRef.current.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      gainNodeRef.current = null;
+    }
+    
+    // Disconnect and clear analyser
+    if (analyserRef.current) {
+      try {
+        analyserRef.current.disconnect();
+      } catch (e) {
+        // Already disconnected
+      }
+      analyserRef.current = null;
+    }
+    
+    // Stop ALL media tracks - this is critical to stop the mic
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current.getTracks().forEach(track => {
+        track.stop();
+        track.enabled = false;
+      });
       mediaStreamRef.current = null;
     }
     
+    // Close audio context AFTER disconnecting nodes
     if (audioContextRef.current) {
-      await audioContextRef.current.close();
+      try {
+        await audioContextRef.current.close();
+      } catch (e) {
+        console.warn('Error closing audio context:', e);
+      }
       audioContextRef.current = null;
     }
     
-    analyserRef.current = null;
+    // Reset audio level
     setAudioLevel(0);
+    
+    // Set isLive to false BEFORE restoring audio
+    setIsLive(false);
     
     // Restore ALL audio sources
     if (autoDuck && preBroadcastStateRef.current) {
@@ -161,10 +193,9 @@ export const PAProvider = ({ children }: { children: ReactNode }) => {
       }
     }
     
-    setIsLive(false);
     toast({
       title: "Broadcast Ended",
-      description: "Music playback has been resumed.",
+      description: "Microphone stopped. Music playback resumed.",
     });
   }, [autoDuck, unifiedAudio, fadeInDuration, toast]);
 
