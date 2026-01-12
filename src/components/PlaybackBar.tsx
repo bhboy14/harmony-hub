@@ -10,40 +10,29 @@ import { DevicePanel } from "@/components/DevicePanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAudioDucking } from "@/hooks/useAudioDucking";
 import { AudioBlockedBadge } from "@/components/AudioUnlockOverlay";
-import { 
+import {
   Play,
-  Pause, 
-  SkipBack, 
-  SkipForward, 
-  Volume2, 
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
   VolumeX,
-  Repeat, 
-  Repeat1, 
-  Shuffle, 
+  Repeat,
+  Repeat1,
+  Shuffle,
   ListMusic,
   Mic,
   MicOff,
-  Monitor,
   Sliders,
   Radio,
   Music,
   Volume1,
-  Keyboard
+  Keyboard,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 // Channel volumes stored in localStorage for persistence
 const loadMixerSettings = () => {
@@ -60,13 +49,13 @@ export const PlaybackBar = () => {
   const pa = usePA();
   const [queueOpen, setQueueOpen] = useState(false);
   const [mixerOpen, setMixerOpen] = useState(false);
-  
+
   // Keyboard shortcuts (Space=Play/Pause, Arrows=Seek)
   const { shortcuts } = useKeyboardShortcuts({ enabled: true });
-  
+
   // Audio ducking during TTS/Voice announcements
   const { isDucking } = useAudioDucking({ enabled: true, duckingLevel: 20 });
-  
+
   // Channel volumes with localStorage persistence
   const [mixerSettings, setMixerSettings] = useState(loadMixerSettings);
   const musicVolume = mixerSettings.music;
@@ -119,14 +108,14 @@ export const PlaybackBar = () => {
   useEffect(() => {
     const effectiveVolume = isMuted ? 0 : Math.round((volume * musicVolume) / 100);
     const normalizedVolume = effectiveVolume / 100;
-    
+
     // Apply to local audio immediately
     if (unified.localAudioRef?.current) {
       unified.localAudioRef.current.volume = normalizedVolume;
     }
-    
+
     // Debounce Spotify API calls to avoid 429 rate limit errors
-    if (activeSource === 'spotify' && spotify.isConnected) {
+    if (activeSource === "spotify" && spotify.isConnected) {
       if (spotifyVolumeTimeoutRef.current) {
         clearTimeout(spotifyVolumeTimeoutRef.current);
       }
@@ -134,7 +123,7 @@ export const PlaybackBar = () => {
         spotify.setVolume(effectiveVolume).catch(() => {});
       }, 300); // 300ms debounce
     }
-    
+
     return () => {
       if (spotifyVolumeTimeoutRef.current) {
         clearTimeout(spotifyVolumeTimeoutRef.current);
@@ -153,11 +142,11 @@ export const PlaybackBar = () => {
 
   // Update individual channel volumes
   const setMusicVolume = (value: number) => {
-    setMixerSettings(prev => ({ ...prev, music: value }));
+    setMixerSettings((prev) => ({ ...prev, music: value }));
   };
 
   const setAzanVolume = (value: number) => {
-    setMixerSettings(prev => ({ ...prev, azan: value }));
+    setMixerSettings((prev) => ({ ...prev, azan: value }));
     // Update azan player settings in localStorage directly
     try {
       const azanSettings = JSON.parse(localStorage.getItem("azanPlayerSettings") || "{}");
@@ -167,9 +156,8 @@ export const PlaybackBar = () => {
   };
 
   const setPaVolume = (value: number) => {
-    setMixerSettings(prev => ({ ...prev, pa: value }));
+    setMixerSettings((prev) => ({ ...prev, pa: value }));
   };
-
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-white/10 z-[100] px-4">
@@ -186,7 +174,7 @@ export const PlaybackBar = () => {
                     alt={currentTrack.title}
                     onError={(e) => {
                       // Hide broken image and show fallback
-                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />
                 ) : (
@@ -265,7 +253,7 @@ export const PlaybackBar = () => {
         <div className="flex items-center justify-end gap-2">
           {/* Audio Blocked Indicator (iOS/Safari) */}
           <AudioBlockedBadge />
-          
+
           {/* Mic Toggle - Connected to PA System */}
           <TooltipProvider>
             <Tooltip>
@@ -279,9 +267,7 @@ export const PlaybackBar = () => {
                   {pa.isLive ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                {pa.isLive ? "Stop Broadcast (Live)" : "Start Broadcast"}
-              </TooltipContent>
+              <TooltipContent>{pa.isLive ? "Stop Broadcast (Live)" : "Start Broadcast"}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -293,7 +279,37 @@ export const PlaybackBar = () => {
             </div>
           )}
 
-          {/* Unified Device Panel - Combines Spotify devices, Cast, AirPlay, and Multi-room */}
+          {/* NEW: Keyboard Shortcuts Menu */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-white">
+                <Keyboard className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="end" side="top">
+              <div className="p-3 border-b">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Keyboard className="h-4 w-4" />
+                  Shortcuts
+                </h4>
+              </div>
+              <div className="p-2 grid gap-1">
+                {shortcuts.map((s) => (
+                  <div
+                    key={s.key}
+                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-muted/50"
+                  >
+                    <span className="text-sm text-muted-foreground">{s.description}</span>
+                    <kbd className="pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground flex">
+                      {s.key}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Unified Device Panel */}
           <DevicePanel variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
 
           {/* Enhanced Mixer */}
@@ -302,11 +318,7 @@ export const PlaybackBar = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-zinc-400 hover:text-white"
-                    >
+                    <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-white">
                       <Sliders className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
@@ -325,7 +337,7 @@ export const PlaybackBar = () => {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="space-y-4">
                   {/* Master Volume */}
                   <div className="space-y-2 p-3 rounded-lg bg-secondary/50">
@@ -336,13 +348,9 @@ export const PlaybackBar = () => {
                       </Label>
                       <span className="text-xs font-medium">{isMuted ? 0 : volume}%</span>
                     </div>
-                    <Slider
-                      value={[isMuted ? 0 : volume]}
-                      max={100}
-                      onValueChange={(v) => setGlobalVolume(v[0])}
-                    />
+                    <Slider value={[isMuted ? 0 : volume]} max={100} onValueChange={(v) => setGlobalVolume(v[0])} />
                   </div>
-                  
+
                   {/* Channel Controls */}
                   <div className="space-y-3">
                     {/* Music Channel */}
@@ -355,14 +363,10 @@ export const PlaybackBar = () => {
                           <span className="text-xs">Music</span>
                           <span className="text-xs text-muted-foreground">{musicVolume}%</span>
                         </div>
-                        <Slider
-                          value={[musicVolume]}
-                          max={100}
-                          onValueChange={(v) => setMusicVolume(v[0])}
-                        />
+                        <Slider value={[musicVolume]} max={100} onValueChange={(v) => setMusicVolume(v[0])} />
                       </div>
                     </div>
-                    
+
                     {/* Azan Channel */}
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -373,18 +377,16 @@ export const PlaybackBar = () => {
                           <span className="text-xs">Azan</span>
                           <span className="text-xs text-muted-foreground">{azanVolume}%</span>
                         </div>
-                        <Slider
-                          value={[azanVolume]}
-                          max={100}
-                          onValueChange={(v) => setAzanVolume(v[0])}
-                        />
+                        <Slider value={[azanVolume]} max={100} onValueChange={(v) => setAzanVolume(v[0])} />
                       </div>
                     </div>
-                    
+
                     {/* PA/Mic Channel */}
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${pa.isLive ? 'bg-red-500/20' : 'bg-zinc-500/20'}`}>
-                        <Mic className={`h-4 w-4 ${pa.isLive ? 'text-red-500' : 'text-zinc-500'}`} />
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center ${pa.isLive ? "bg-red-500/20" : "bg-zinc-500/20"}`}
+                      >
+                        <Mic className={`h-4 w-4 ${pa.isLive ? "text-red-500" : "text-zinc-500"}`} />
                       </div>
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center justify-between">
@@ -398,14 +400,12 @@ export const PlaybackBar = () => {
                           disabled={!pa.isLive}
                         />
                         {/* Audio Level Meter */}
-                        {pa.isLive && (
-                          <Progress value={pa.audioLevel} className="h-1 mt-1" />
-                        )}
+                        {pa.isLive && <Progress value={pa.audioLevel} className="h-1 mt-1" />}
                       </div>
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Quick Actions */}
                 <div className="pt-2 border-t border-border/50">
                   <Button
@@ -443,17 +443,8 @@ export const PlaybackBar = () => {
 
           {/* Volume */}
           <div className="flex items-center gap-2 w-32">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleMute}
-              className="text-zinc-400 hover:text-white h-8 w-8"
-            >
-              {isMuted || volume === 0 ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
+            <Button variant="ghost" size="icon" onClick={toggleMute} className="text-zinc-400 hover:text-white h-8 w-8">
+              {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </Button>
             <Slider
               value={[isMuted ? 0 : volume]}
