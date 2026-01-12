@@ -6,7 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import { SeekBar } from "@/components/SeekBar";
 import { useState, useEffect, useRef } from "react";
 import { QueuePanel } from "@/components/QueuePanel";
-import { CastButton } from "@/components/CastButton";
+import { DevicePanel } from "@/components/DevicePanel";
 import { 
   Play,
   Pause, 
@@ -26,14 +26,6 @@ import {
   Music,
   Volume1
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -167,17 +159,6 @@ export const PlaybackBar = () => {
     setMixerSettings(prev => ({ ...prev, pa: value }));
   };
 
-  // Get available Spotify devices
-  const spotifyDevices = spotify.devices || [];
-  const activeDevice = spotifyDevices.find(d => d.is_active);
-
-  const handleDeviceSelect = async (deviceId: string) => {
-    try {
-      await spotify.transferPlayback(deviceId);
-    } catch (err) {
-      console.error('Failed to transfer playback:', err);
-    }
-  };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-white/10 z-[100] px-4">
@@ -275,56 +256,8 @@ export const PlaybackBar = () => {
             </div>
           )}
 
-          {/* Device Selector */}
-          <DropdownMenu>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={activeDevice ? "text-green-500" : "text-zinc-400 hover:text-white"}
-                    >
-                      <Monitor className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {activeDevice ? `Playing on ${activeDevice.name}` : "Select Device"}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Available Devices</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {spotifyDevices.length === 0 ? (
-                <div className="px-2 py-3 text-sm text-muted-foreground text-center">
-                  No devices available
-                </div>
-              ) : (
-                spotifyDevices.map((device) => (
-                  <DropdownMenuItem
-                    key={device.id}
-                    onClick={() => device.id && handleDeviceSelect(device.id)}
-                    className={device.is_active ? "bg-primary/10" : ""}
-                  >
-                    <Monitor className="h-4 w-4 mr-2" />
-                    <div className="flex-1">
-                      <p className="font-medium">{device.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{device.type}</p>
-                    </div>
-                    {device.is_active && (
-                      <span className="text-xs text-green-500">Playing</span>
-                    )}
-                  </DropdownMenuItem>
-                ))
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Cast Button */}
-          <CastButton variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
+          {/* Unified Device Panel - Combines Spotify devices, Cast, AirPlay, and Multi-room */}
+          <DevicePanel variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
 
           {/* Enhanced Mixer */}
           <Popover open={mixerOpen} onOpenChange={setMixerOpen}>
