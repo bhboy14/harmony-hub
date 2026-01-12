@@ -334,6 +334,13 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
     }
   };
 
+  // Refresh audio output devices when panel opens
+  useEffect(() => {
+    if (isOpen && audioOutput.isSupported) {
+      audioOutput.refreshDevices();
+    }
+  }, [isOpen, audioOutput.isSupported]);
+
   // Portal content
   const panelContent = isOpen && createPortal(
     <div
@@ -418,7 +425,7 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${playbackExpanded ? '' : '-rotate-90'}`} />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-1 pt-1">
-              {/* Local Output Picker */}
+              {/* Browser picker - only show on supported browsers as an extra option */}
               {audioOutput.isSelectorSupported && (
                 <button
                   onClick={handleShowOutputPicker}
@@ -428,8 +435,8 @@ export const DevicePanel = ({ variant = "ghost", size = "icon", className }: Dev
                     <AudioLines className="h-4 w-4" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-sm">Choose Speaker</p>
-                    <p className="text-xs text-muted-foreground">System audio output</p>
+                    <p className="font-medium text-sm">System Picker</p>
+                    <p className="text-xs text-muted-foreground">Open browser audio selector</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </button>
