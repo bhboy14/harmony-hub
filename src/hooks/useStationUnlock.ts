@@ -26,11 +26,15 @@ interface UseStationUnlockReturn {
 export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStationUnlockReturn => {
   const { onUnlock } = options;
   
-  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    // Check session storage immediately to prevent flashing
+    return sessionStorage.getItem('stationUnlocked') === 'true';
+  });
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [hasMicPermission, setHasMicPermission] = useState(false);
   const [hasSpeakerPermission, setHasSpeakerPermission] = useState(false);
   const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const onUnlockRef = useRef(onUnlock);
@@ -42,12 +46,17 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
 
   // Detect iOS/Safari and check existing permissions (without prompting)
   useEffect(() => {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    // Comprehensive iOS/iPad detection
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
     
-    setIsIOSDevice(isIOS || (isSafari && isMobile));
+    const needsGestureUnlock = isIOS || isIPadOS || (isSafari && isMobile);
+    setIsIOSDevice(needsGestureUnlock);
+    
+    console.log('[StationUnlock] Device detection:', { isIOS, isIPadOS, isSafari, isMobile, needsGestureUnlock });
 
     // Check session storage for previous unlock
     const wasUnlocked = sessionStorage.getItem('stationUnlocked') === 'true';
@@ -55,33 +64,21 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
       setIsUnlocked(true);
       setHasMicPermission(true);
       setHasSpeakerPermission(true);
+      console.log('[StationUnlock] Already unlocked from session');
     }
 
-    // Passively check if we already have permissions (don't prompt)
-    if ('permissions' in navigator) {
-      // Check microphone permission status without prompting
-      (navigator.permissions as any).query?.({ name: 'microphone' as any })
-        .then((result: PermissionStatus) => {
-          if (result.state === 'granted') {
-            setHasMicPermission(true);
-          }
-        })
-        .catch(() => {
-          // Permission query not supported for microphone
-        });
-    }
-
-    // Check if we can enumerate devices (indicates previous permission)
+    // Check if we can enumerate devices with labels (indicates existing permission)
     navigator.mediaDevices.enumerateDevices()
       .then((devices) => {
-        // If we have labels, we have permission
-        const hasLabels = devices.some(d => d.label);
+        const hasLabels = devices.some(d => d.label && d.label.length > 0);
         if (hasLabels) {
           setHasMicPermission(true);
+          console.log('[StationUnlock] Has existing mic permission (labels visible)');
         }
       })
       .catch(() => {});
 
+    setIsInitialized(true);
   }, []);
 
   /**
@@ -89,10 +86,15 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
    * This MUST be called from a click/touch event handler.
    */
   const unlockStation = useCallback(async (): Promise<boolean> => {
-    if (isUnlocked) return true;
+    if (isUnlocked) {
+      console.log('[StationUnlock] Already unlocked');
+      return true;
+    }
     
     setIsUnlocking(true);
     console.log('[StationUnlock] Starting unlock sequence...');
+
+    let success = false;
 
     try {
       // Step 1: Resume/Create AudioContext (for iOS)
@@ -101,11 +103,12 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
         if (AudioContextClass) {
           if (!audioContextRef.current) {
             audioContextRef.current = new AudioContextClass();
+            console.log('[StationUnlock] Created AudioContext');
           }
           
           if (audioContextRef.current.state === 'suspended') {
             await audioContextRef.current.resume();
-            console.log('[StationUnlock] AudioContext resumed');
+            console.log('[StationUnlock] AudioContext resumed, state:', audioContextRef.current.state);
           }
         }
       } catch (e) {
@@ -118,10 +121,16 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
         silentAudio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
         silentAudio.volume = 0.001;
         silentAudio.muted = true;
-        await silentAudio.play();
+        
+        // Use play() promise
+        const playPromise = silentAudio.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
         silentAudio.pause();
         silentAudio.muted = false;
         console.log('[StationUnlock] Silent audio played');
+        success = true;
       } catch (e) {
         console.warn('[StationUnlock] Silent audio error:', e);
       }
@@ -137,26 +146,28 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
           oscillator.start(0);
           oscillator.stop(audioContextRef.current.currentTime + 0.001);
           console.log('[StationUnlock] Oscillator played');
+          success = true;
         } catch (e) {
           console.warn('[StationUnlock] Oscillator error:', e);
         }
       }
 
-      // Step 4: Request microphone permission
+      // Step 4: Request microphone permission (this will show native prompt)
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // Stop tracks immediately - we just needed the permission
         stream.getTracks().forEach(track => track.stop());
         setHasMicPermission(true);
         console.log('[StationUnlock] Microphone permission granted');
+        success = true;
       } catch (e: any) {
-        console.warn('[StationUnlock] Microphone permission denied or error:', e);
-        // Continue even if mic permission is denied
+        console.warn('[StationUnlock] Microphone permission denied or error:', e.name, e.message);
+        // Continue even if mic permission is denied - audio unlock is more important
       }
 
-      // Step 5: Request speaker selection permission (if supported)
+      // Step 5: Request speaker selection permission (if supported) - skip on iOS as it's not supported
       const mediaDevices = navigator.mediaDevices as any;
-      if (typeof mediaDevices?.selectAudioOutput === 'function') {
+      if (typeof mediaDevices?.selectAudioOutput === 'function' && !isIOSDevice) {
         try {
           await mediaDevices.selectAudioOutput();
           setHasSpeakerPermission(true);
@@ -168,7 +179,7 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
           }
         }
       } else {
-        // Not supported - consider it "granted" since we can't request it
+        // Not supported - consider it "granted"
         setHasSpeakerPermission(true);
       }
 
@@ -182,7 +193,10 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
         try {
           mediaEl.muted = true;
           mediaEl.volume = 0;
-          await mediaEl.play();
+          const playPromise = mediaEl.play();
+          if (playPromise !== undefined) {
+            await playPromise.catch(() => {});
+          }
           mediaEl.pause();
         } catch (e) {
           // Ignore play errors
@@ -192,23 +206,30 @@ export const useStationUnlock = (options: UseStationUnlockOptions = {}): UseStat
         }
       }
 
-      // Mark as unlocked
-      setIsUnlocked(true);
-      sessionStorage.setItem('stationUnlocked', 'true');
-      onUnlockRef.current?.();
+      // If AudioContext is running or we played something, consider it a success
+      if (audioContextRef.current?.state === 'running') {
+        success = true;
+      }
+
+      if (success) {
+        // Mark as unlocked
+        setIsUnlocked(true);
+        sessionStorage.setItem('stationUnlocked', 'true');
+        onUnlockRef.current?.();
+        console.log('[StationUnlock] Station unlocked successfully');
+      }
       
-      console.log('[StationUnlock] Station unlocked successfully');
-      return true;
+      return success;
     } catch (error) {
       console.error('[StationUnlock] Failed to unlock station:', error);
       return false;
     } finally {
       setIsUnlocking(false);
     }
-  }, [isUnlocked]);
+  }, [isUnlocked, isIOSDevice]);
 
-  // Determine if unlock is needed
-  const needsUnlock = !isUnlocked && (isIOSDevice || !hasMicPermission);
+  // Determine if unlock is needed - only after initialization
+  const needsUnlock = isInitialized && !isUnlocked && isIOSDevice;
 
   return {
     isUnlocked,
