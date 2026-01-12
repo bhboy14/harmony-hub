@@ -92,7 +92,7 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
   };
 
   return (
-    <div className="w-72 sm:w-80 h-full bg-background/95 backdrop-blur-sm flex flex-col border-l border-border">
+    <div className="w-72 sm:w-80 h-full bg-background/95 backdrop-blur-sm flex flex-col border-l border-border relative">
       {/* Header with tab navigation */}
       <div className="flex items-center justify-between p-3 border-b border-border/50 bg-secondary/30">
         <Button 
@@ -124,22 +124,12 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={goNext}
+          onClick={onClose}
           className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary"
         >
-          <ChevronRight className="h-4 w-4" />
+          <X className="h-4 w-4" />
         </Button>
       </div>
-
-      {/* Close button */}
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        onClick={onClose} 
-        className="absolute top-2 right-2 h-7 w-7 text-muted-foreground hover:text-foreground z-10"
-      >
-        <X className="h-4 w-4" />
-      </Button>
 
       {/* Tab Content */}
       <ScrollArea className="flex-1">
