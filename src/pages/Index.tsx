@@ -8,6 +8,7 @@ import { PASystem } from "@/components/PASystem";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
 import { PlaybackBar } from "@/components/PlaybackBar";
+import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler } from "@/hooks/useAzanScheduler";
@@ -176,6 +177,9 @@ const Index = () => {
         </div>
       </div>
       <PlaybackBar />
+      
+      {/* iOS/Safari Audio Unlock Overlay */}
+      <AudioUnlockOverlay />
     </div>
   );
 };
