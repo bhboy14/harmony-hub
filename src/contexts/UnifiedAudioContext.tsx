@@ -161,29 +161,14 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   // Playback sync across devices
   const { isSyncing, connectedDevices, broadcastState } = usePlaybackSync({
     enabled: !!user,
-    onRemoteStateChange: useCallback(async (state, action) => {
+    onRemoteStateChange: useCallback((state, action) => {
       console.log('[Sync] Received remote state change:', action, state);
-      
       // Handle remote state changes - sync to this device
       if (action === 'play' && !isPlaying) {
         // Remote started playing
         if (localAudioRef.current && activeSource === 'local') {
-          try {
-            // iOS requires muted autoplay first, then unmute
-            const wasMuted = localAudioRef.current.muted;
-            localAudioRef.current.muted = true;
-            await localAudioRef.current.play();
-            // Small delay before unmuting (iOS requirement)
-            setTimeout(() => {
-              if (localAudioRef.current) {
-                localAudioRef.current.muted = wasMuted;
-              }
-            }, 50);
-            setIsPlaying(true);
-          } catch (error) {
-            console.error('[Sync] Failed to play on remote command:', error);
-            // Audio is likely locked - the AudioUnlockOverlay will handle this
-          }
+          localAudioRef.current.play();
+          setIsPlaying(true);
         }
       } else if (action === 'pause' && isPlaying) {
         // Remote paused
