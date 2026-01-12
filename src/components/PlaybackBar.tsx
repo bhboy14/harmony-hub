@@ -9,6 +9,7 @@ import { QueuePanel } from "@/components/QueuePanel";
 import { DevicePanel } from "@/components/DevicePanel";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useAudioDucking } from "@/hooks/useAudioDucking";
+import { AudioBlockedBadge } from "@/components/AudioUnlockOverlay";
 import { 
   Play,
   Pause, 
@@ -240,6 +241,9 @@ export const PlaybackBar = () => {
 
         {/* Volume/Queue/Extras */}
         <div className="flex items-center justify-end gap-2">
+          {/* Audio Blocked Indicator (iOS/Safari) */}
+          <AudioBlockedBadge />
+          
           {/* Mic Toggle - Connected to PA System */}
           <TooltipProvider>
             <Tooltip>
