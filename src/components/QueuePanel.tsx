@@ -11,10 +11,18 @@ import {
   GripVertical,
   Youtube,
   HardDrive,
-  Cloud
+  Cloud,
+  PlayCircle,
+  RotateCcw
 } from "lucide-react";
 import { QueueTrack } from "@/hooks/useUnifiedQueue";
 import { AudioSource } from "@/contexts/UnifiedAudioContext";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface QueuePanelProps {
   isOpen: boolean;
@@ -28,6 +36,7 @@ interface QueuePanelProps {
   onClearQueue: () => void;
   onClearUpcoming: () => void;
   isPlaying: boolean;
+  onPlayNow?: () => void;
 }
 
 const SpotifyIcon = () => (
@@ -159,8 +168,31 @@ export const QueuePanel = ({
   onClearQueue,
   onClearUpcoming,
   isPlaying,
+  onPlayNow,
 }: QueuePanelProps) => {
   const currentTrack = queue[currentIndex];
+
+  // Calculate total queue duration
+  const totalDuration = queue.reduce((acc, track) => acc + track.duration, 0);
+  const formatTotalDuration = () => {
+    const totalMinutes = Math.floor(totalDuration / 60000);
+    if (totalMinutes < 60) {
+      return `${totalMinutes} min`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
+  const handleClearAndFreeMemory = () => {
+    // Clear any blob URLs from memory
+    queue.forEach(track => {
+      if (track.url && track.url.startsWith('blob:')) {
+        URL.revokeObjectURL(track.url);
+      }
+    });
+    onClearQueue();
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -170,19 +202,52 @@ export const QueuePanel = ({
             <SheetTitle className="flex items-center gap-2">
               <ListMusic className="h-5 w-5" />
               Queue
+              {queue.length > 0 && (
+                <span className="text-xs text-muted-foreground font-normal">
+                  {queue.length} tracks • {formatTotalDuration()}
+                </span>
+              )}
             </SheetTitle>
-            {queue.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClearQueue}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Clear
-              </Button>
-            )}
           </div>
+          
+          {/* Quick Actions */}
+          {queue.length > 0 && (
+            <div className="flex items-center gap-2 mt-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onPlayTrack(0)}
+                      className="flex-1"
+                    >
+                      <PlayCircle className="h-4 w-4 mr-2" />
+                      Play Now
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Start playing from the beginning</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearAndFreeMemory}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Clear
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Clear queue and free memory</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-80px)]">
