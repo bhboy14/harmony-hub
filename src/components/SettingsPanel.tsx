@@ -6,10 +6,47 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Volume2, Clock, MapPin, Wifi, Database, RefreshCw, Cast } from "lucide-react";
+import { Settings, Volume2, Clock, MapPin, Wifi, WifiOff, Database, RefreshCw, Cast, Cloud, Trash2, Download } from "lucide-react";
 import { CastingSettings } from "./CastingSettings";
-
+import { useOfflineSupport, clearAudioCache } from "@/hooks/useOfflineSupport";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 export const SettingsPanel = () => {
+  const { isOnline, cachedPrayerTimes, clearCache, isPrayerTimesCacheStale } = useOfflineSupport();
+  const { toast } = useToast();
+
+  const handleClearAllCache = async () => {
+    clearCache();
+    await clearAudioCache();
+    
+    // Clear service worker cache
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map(name => caches.delete(name)));
+    }
+    
+    toast({
+      title: "Cache Cleared",
+      description: "All offline data has been removed",
+    });
+  };
+
+  const handleInstallPWA = async () => {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      toast({
+        title: "Already Installed",
+        description: "App is already installed on your device",
+      });
+      return;
+    }
+
+    toast({
+      title: "Install App",
+      description: "Use your browser's 'Add to Home Screen' option to install",
+    });
+  };
+
   return (
     <Tabs defaultValue="general" className="w-full">
       <TabsList className="mb-6">
@@ -157,14 +194,97 @@ export const SettingsPanel = () => {
 
               <div className="p-3 rounded-lg bg-secondary/30 space-y-2">
                 <div className="flex items-center gap-2">
-                  <Wifi className="h-4 w-4 text-primary" />
-                  <span className="text-sm">Network: Connected</span>
+                  {isOnline ? (
+                    <Wifi className="h-4 w-4 text-primary" />
+                  ) : (
+                    <WifiOff className="h-4 w-4 text-destructive" />
+                  )}
+                  <span className="text-sm">Network: {isOnline ? 'Connected' : 'Offline'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-primary" />
                   <span className="text-sm">Storage: 45.2 GB free</span>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Offline & Cache Settings */}
+          <Card className="glass-panel">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Cloud className="h-5 w-5 text-accent" />
+                Offline & Cache
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Status */}
+              <div className="p-3 rounded-lg bg-secondary/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Connection Status</span>
+                  <Badge variant={isOnline ? "secondary" : "destructive"}>
+                    {isOnline ? (
+                      <><Wifi className="h-3 w-3 mr-1" /> Online</>
+                    ) : (
+                      <><WifiOff className="h-3 w-3 mr-1" /> Offline</>
+                    )}
+                  </Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Prayer Times Cache</span>
+                  <Badge variant={cachedPrayerTimes ? (isPrayerTimesCacheStale() ? "outline" : "secondary") : "destructive"}>
+                    {cachedPrayerTimes 
+                      ? (isPrayerTimesCacheStale() ? "Outdated" : "Fresh")
+                      : "Not Cached"}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Service Worker</span>
+                  <Badge variant="secondary">
+                    {'serviceWorker' in navigator ? 'Active' : 'Not Supported'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Cached Data Info */}
+              {cachedPrayerTimes && (
+                <div className="p-3 rounded-lg border border-border/50 space-y-2">
+                  <p className="text-xs text-muted-foreground">Cached Prayer Times</p>
+                  <p className="text-sm font-medium">
+                    {cachedPrayerTimes.location.city}, {cachedPrayerTimes.location.country}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Cached on: {new Date(cachedPrayerTimes.cachedAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="space-y-3">
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2"
+                  onClick={handleInstallPWA}
+                >
+                  <Download className="h-4 w-4" />
+                  Install App
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full gap-2 text-destructive hover:text-destructive"
+                  onClick={handleClearAllCache}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Clear All Cache
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Local audio files are always available offline. Spotify and YouTube require internet.
+              </p>
             </CardContent>
           </Card>
 
