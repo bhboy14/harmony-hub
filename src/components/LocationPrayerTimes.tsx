@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { MapPin, RefreshCw, ChevronDown } from "lucide-react";
+import { MapPin, RefreshCw, WifiOff, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useOfflineSupport } from "@/hooks/useOfflineSupport";
+import { Badge } from "@/components/ui/badge";
 
 interface LocationPrayerTimesProps {
   onTimesUpdate: (times: PrayerTimeData[]) => void;
@@ -83,11 +85,13 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
   const [customCity, setCustomCity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
   const { toast } = useToast();
+  const { isOnline, cachePrayerTimes, getCachedPrayerTimes, isPrayerTimesCacheStale } = useOfflineSupport();
 
   const cities = CITIES_BY_COUNTRY[country] || [];
 
-  const fetchPrayerTimes = async () => {
+  const fetchPrayerTimes = async (useCache = false) => {
     const selectedCity = customCity || city;
     const selectedCountry = COUNTRIES.find(c => c.code === country)?.name || country;
     
@@ -100,7 +104,35 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
       return;
     }
 
+    // Check cache first if offline or useCache is true
+    if (!isOnline || useCache) {
+      const cached = getCachedPrayerTimes();
+      if (cached) {
+        onTimesUpdate(cached.times);
+        setUsingCachedData(true);
+        if (onLocationChange) {
+          onLocationChange(cached.location);
+        }
+        toast({
+          title: "Using cached data",
+          description: `Prayer times from ${cached.location.city} (cached ${isPrayerTimesCacheStale() ? '- may be outdated' : ''})`,
+        });
+        return;
+      }
+      
+      if (!isOnline) {
+        toast({
+          title: "Offline",
+          description: "No cached prayer times available. Please connect to the internet.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
+    setUsingCachedData(false);
+    
     try {
       const response = await fetch(
         `https://api.aladhan.com/v1/timingsByCity?city=${encodeURIComponent(selectedCity)}&country=${encodeURIComponent(selectedCountry)}&method=4`
@@ -127,6 +159,9 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
         onTimesUpdate(prayerTimes);
         setLastFetched(new Date());
         
+        // Cache the prayer times for offline use
+        cachePrayerTimes(prayerTimes, { country: selectedCountry, city: selectedCity });
+        
         // Save to localStorage
         localStorage.setItem('prayerCountry', country);
         localStorage.setItem('prayerCity', selectedCity);
@@ -144,20 +179,55 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
       }
     } catch (error) {
       console.error("Failed to fetch prayer times:", error);
-      toast({
-        title: "Failed to fetch times",
-        description: "Using default times. Check your city name.",
-        variant: "destructive",
-      });
+      
+      // Try to use cached data on error
+      const cached = getCachedPrayerTimes();
+      if (cached) {
+        onTimesUpdate(cached.times);
+        setUsingCachedData(true);
+        toast({
+          title: "Using cached data",
+          description: "Couldn't fetch new times. Using cached prayer times.",
+        });
+      } else {
+        toast({
+          title: "Failed to fetch times",
+          description: "Using default times. Check your city name.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch on mount - always fetch, use defaults if not saved
+  // Fetch on mount - use cache if available and fresh, otherwise fetch
   useEffect(() => {
-    fetchPrayerTimes();
+    const cached = getCachedPrayerTimes();
+    if (cached && !isPrayerTimesCacheStale()) {
+      // Use cached data if fresh
+      onTimesUpdate(cached.times);
+      setUsingCachedData(true);
+      if (onLocationChange) {
+        onLocationChange(cached.location);
+      }
+    } else {
+      // Fetch new data
+      fetchPrayerTimes();
+    }
   }, []);
+
+  // Listen for sync events from service worker
+  useEffect(() => {
+    const handleSync = () => {
+      if (isOnline) {
+        fetchPrayerTimes();
+      }
+    };
+    
+    window.addEventListener('sync-prayer-times', handleSync);
+    return () => window.removeEventListener('sync-prayer-times', handleSync);
+  }, [isOnline, country, city, customCity]);
 
   // Update city when country changes
   useEffect(() => {
@@ -232,19 +302,37 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
       )}
       
       <Button 
-        onClick={fetchPrayerTimes} 
+        onClick={() => fetchPrayerTimes(false)} 
         className="w-full gap-2"
-        disabled={isLoading}
+        disabled={isLoading || !isOnline}
       >
         {isLoading ? (
           <RefreshCw className="h-4 w-4 animate-spin" />
+        ) : !isOnline ? (
+          <WifiOff className="h-4 w-4" />
         ) : (
           <RefreshCw className="h-4 w-4" />
         )}
-        {isLoading ? "Fetching..." : "Update Prayer Times"}
+        {isLoading ? "Fetching..." : !isOnline ? "Offline" : "Update Prayer Times"}
       </Button>
       
-      {lastFetched && (
+      {/* Cache status */}
+      <div className="flex items-center justify-center gap-2">
+        {usingCachedData && (
+          <Badge variant="outline" className="text-xs gap-1">
+            <Cloud className="h-3 w-3" />
+            Using cached data
+          </Badge>
+        )}
+        {!isOnline && (
+          <Badge variant="destructive" className="text-xs gap-1">
+            <WifiOff className="h-3 w-3" />
+            Offline
+          </Badge>
+        )}
+      </div>
+      
+      {lastFetched && !usingCachedData && (
         <p className="text-xs text-center text-muted-foreground">
           Last updated: {lastFetched.toLocaleTimeString()}
         </p>

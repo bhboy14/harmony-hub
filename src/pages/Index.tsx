@@ -9,12 +9,14 @@ import { SettingsPanel } from "@/components/SettingsPanel";
 import { AdminPanel } from "@/components/AdminPanel";
 import { PlaybackBar } from "@/components/PlaybackBar";
 import { AudioUnlockOverlay } from "@/components/AudioUnlockOverlay";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { usePrayerTimes } from "@/hooks/usePrayerTimes";
 import { useMediaLibrary } from "@/hooks/useMediaLibrary";
 import { useAzanScheduler } from "@/hooks/useAzanScheduler";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOfflineSupport } from "@/hooks/useOfflineSupport";
 import { Loader2, ChevronLeft, ChevronRight, ListMusic, Moon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
@@ -137,6 +139,7 @@ const Index = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
+            <OfflineIndicator />
             <Button
               variant="ghost"
               size="icon"
