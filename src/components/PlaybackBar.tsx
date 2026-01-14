@@ -28,13 +28,11 @@ import {
   Radio,
   Music,
   Volume1,
-  Keyboard,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 // Channel volumes stored in localStorage for persistence
 const loadMixerSettings = () => {
@@ -162,65 +160,64 @@ export const PlaybackBar = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-[90px] bg-black border-t border-white/10 z-[100] px-4">
-      <div className="h-full grid grid-cols-3 items-center">
-        {/* Track Info */}
-        <div className="flex items-center gap-3 min-w-0">
+    <div className="fixed bottom-0 left-0 right-0 h-[72px] md:h-[90px] bg-black border-t border-white/10 z-[100] px-2 md:px-4">
+      <div className="h-full grid grid-cols-3 items-center gap-2 md:gap-4">
+        {/* Track Info - Compact on mobile */}
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           {currentTrack ? (
             <>
-              <div className="w-14 h-14 rounded shadow-lg overflow-hidden bg-zinc-800 flex-shrink-0">
+              <div className="w-10 h-10 md:w-14 md:h-14 rounded shadow-lg overflow-hidden bg-zinc-800 flex-shrink-0">
                 {currentTrack.albumArt ? (
                   <img
                     src={currentTrack.albumArt}
                     className="w-full h-full object-cover"
                     alt={currentTrack.title}
                     onError={(e) => {
-                      // Hide broken image and show fallback
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-700 to-zinc-800">
-                    <Music className="h-6 w-6 text-zinc-500" />
+                    <Music className="h-4 w-4 md:h-6 md:w-6 text-zinc-500" />
                   </div>
                 )}
               </div>
-              <div className="min-w-0">
-                <p className="font-medium text-white truncate text-sm">{currentTrack.title}</p>
-                <p className="text-xs text-zinc-400 truncate">{currentTrack.artist}</p>
+              <div className="min-w-0 hidden xs:block">
+                <p className="font-medium text-white truncate text-xs md:text-sm">{currentTrack.title}</p>
+                <p className="text-[10px] md:text-xs text-zinc-400 truncate">{currentTrack.artist}</p>
               </div>
             </>
           ) : (
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded shadow-lg bg-zinc-800 flex items-center justify-center">
-                <Music className="h-6 w-6 text-zinc-600" />
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-10 h-10 md:w-14 md:h-14 rounded shadow-lg bg-zinc-800 flex items-center justify-center">
+                <Music className="h-4 w-4 md:h-6 md:w-6 text-zinc-600" />
               </div>
-              <div className="min-w-0">
-                <p className="font-medium text-zinc-500 text-sm">No track playing</p>
-                <p className="text-xs text-zinc-600">Select a track to start</p>
+              <div className="min-w-0 hidden xs:block">
+                <p className="font-medium text-zinc-500 text-xs md:text-sm">No track playing</p>
+                <p className="text-[10px] md:text-xs text-zinc-600">Select a track</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Playback Controls */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1">
+        {/* Playback Controls - Centered */}
+        <div className="flex flex-col items-center gap-0.5 md:gap-1">
+          <div className="flex items-center gap-0.5 md:gap-1">
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleShuffle}
-              className={shuffle ? "text-green-500" : "text-zinc-400"}
+              className={`h-7 w-7 md:h-8 md:w-8 ${shuffle ? "text-green-500" : "text-zinc-400"}`}
             >
-              <Shuffle className="h-4 w-4" />
+              <Shuffle className="h-3 w-3 md:h-4 md:w-4" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => previous()} className="text-white">
-              <SkipBack className="h-4 w-4 fill-current" />
+            <Button variant="ghost" size="icon" onClick={() => previous()} className="h-7 w-7 md:h-8 md:w-8 text-white">
+              <SkipBack className="h-3 w-3 md:h-4 md:w-4 fill-current" />
             </Button>
             <Button
               size="icon"
               onClick={() => (isPlaying ? pause() : play())}
-              className="h-8 w-8 rounded-full bg-white text-black"
+              className="h-8 w-8 md:h-9 md:w-9 rounded-full bg-white text-black"
             >
               {isPlaying ? (
                 <Pause className="h-4 w-4 fill-current" />
@@ -228,16 +225,16 @@ export const PlaybackBar = () => {
                 <Play className="h-4 w-4 fill-current ml-0.5" />
               )}
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => next()} className="text-white">
-              <SkipForward className="h-4 w-4 fill-current" />
+            <Button variant="ghost" size="icon" onClick={() => next()} className="h-7 w-7 md:h-8 md:w-8 text-white">
+              <SkipForward className="h-3 w-3 md:h-4 md:w-4 fill-current" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleRepeat}
-              className={repeat !== "off" ? "text-green-500" : "text-zinc-400"}
+              className={`h-7 w-7 md:h-8 md:w-8 ${repeat !== "off" ? "text-green-500" : "text-zinc-400"}`}
             >
-              {repeat === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+              {repeat === "one" ? <Repeat1 className="h-3 w-3 md:h-4 md:w-4" /> : <Repeat className="h-3 w-3 md:h-4 md:w-4" />}
             </Button>
           </div>
 
@@ -247,16 +244,16 @@ export const PlaybackBar = () => {
             onSeek={handleSeek}
             showLabels={true}
             activeSource={activeSource}
-            className="w-full max-w-[600px]"
+            className="w-full max-w-[400px] md:max-w-[600px]"
           />
         </div>
 
-        {/* Volume/Queue/Extras */}
-        <div className="flex items-center justify-end gap-2">
+        {/* Volume/Queue/Extras - Compact on mobile */}
+        <div className="flex items-center justify-end gap-1 md:gap-2">
           {/* Audio Blocked Indicator (iOS/Safari) */}
           <AudioBlockedBadge />
 
-          {/* Mic Toggle - Connected to PA System */}
+          {/* Mic Toggle - Hidden text on mobile */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -264,25 +261,27 @@ export const PlaybackBar = () => {
                   variant="ghost"
                   size="icon"
                   onClick={handleMicToggle}
-                  className={pa.isLive ? "text-red-500 animate-pulse" : "text-zinc-400 hover:text-white"}
+                  className={`h-7 w-7 md:h-8 md:w-8 ${pa.isLive ? "text-red-500 animate-pulse" : "text-zinc-400 hover:text-white"}`}
                 >
-                  {pa.isLive ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+                  {pa.isLive ? <Mic className="h-3 w-3 md:h-4 md:w-4" /> : <MicOff className="h-3 w-3 md:h-4 md:w-4" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{pa.isLive ? "Stop Broadcast (Live)" : "Start Broadcast"}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
-          {/* Live Indicator */}
+          {/* Live Indicator - Compact on mobile */}
           {pa.isLive && (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/20 border border-red-500/30">
               <Radio className="h-3 w-3 text-red-500 animate-pulse" />
               <span className="text-[10px] font-medium text-red-500">LIVE</span>
             </div>
           )}
 
-          {/* Unified Device Panel - Combines Spotify devices, Cast, AirPlay, and Multi-room */}
-          <DevicePanel variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
+          {/* Device Panel - Hidden on mobile */}
+          <div className="hidden md:block">
+            <DevicePanel variant="ghost" size="icon" className="text-zinc-400 hover:text-white" />
+          </div>
 
           {/* Enhanced Mixer */}
           <Popover open={mixerOpen} onOpenChange={setMixerOpen}>
@@ -290,15 +289,15 @@ export const PlaybackBar = () => {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-zinc-400 hover:text-white">
-                      <Sliders className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 md:h-8 md:w-8 text-zinc-400 hover:text-white">
+                      <Sliders className="h-3 w-3 md:h-4 md:w-4" />
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent>Audio Mixer</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <PopoverContent align="end" className="w-80">
+            <PopoverContent align="end" className="w-72 md:w-80">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium text-sm">Audio Mixer</h4>
@@ -408,13 +407,13 @@ export const PlaybackBar = () => {
             variant="ghost"
             size="icon"
             onClick={() => setQueueOpen(true)}
-            className="text-zinc-400 hover:text-white"
+            className="h-7 w-7 md:h-8 md:w-8 text-zinc-400 hover:text-white"
           >
-            <ListMusic className="h-4 w-4" />
+            <ListMusic className="h-3 w-3 md:h-4 md:w-4" />
           </Button>
 
-          {/* Volume */}
-          <div className="flex items-center gap-2 w-32">
+          {/* Volume - Hidden on mobile, shown in mixer */}
+          <div className="hidden md:flex items-center gap-2 w-32">
             <Button variant="ghost" size="icon" onClick={toggleMute} className="text-zinc-400 hover:text-white h-8 w-8">
               {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </Button>

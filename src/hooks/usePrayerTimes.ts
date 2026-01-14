@@ -25,8 +25,8 @@ export const usePrayerTimes = () => {
   const [nextPrayer, setNextPrayer] = useState<PrayerTime | null>(null);
   const [timeUntilNext, setTimeUntilNext] = useState<string>("");
   const [location, setLocation] = useState<LocationSettings>({
-    country: localStorage.getItem('prayerCountry') || "Saudi Arabia",
-    city: localStorage.getItem('prayerCity') || "Mecca",
+    country: localStorage.getItem('prayerCountry') || "Bahrain",
+    city: localStorage.getItem('prayerCity') || "Manama",
   });
 
   // Update prayer times from external data

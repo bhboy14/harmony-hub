@@ -52,7 +52,11 @@ const Index = () => {
     if (spotify.isConnected && spotify.playbackState?.isPlaying) {
       await spotify.pause();
     }
-  }, [spotify]);
+    // Also pause local audio
+    if (unifiedAudio.isPlaying) {
+      unifiedAudio.pause();
+    }
+  }, [spotify, unifiedAudio]);
 
   const handleResume = useCallback(async () => {
     if (spotify.isConnected) {
@@ -66,7 +70,7 @@ const Index = () => {
     onFadeIn: handleFadeIn,
     onPause: handlePause,
     onResume: handleResume,
-    isPlaying: spotify.playbackState?.isPlaying || false,
+    isPlaying: spotify.playbackState?.isPlaying || unifiedAudio.isPlaying || false,
   });
 
   useEffect(() => {
@@ -93,10 +97,12 @@ const Index = () => {
     <div className="min-h-screen bg-background flex overflow-hidden">
       <IconSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <div className="flex-1 ml-[72px] flex flex-col h-screen">
-        <header className="h-16 flex items-center justify-between px-6 bg-transparent shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+      {/* Main content - responsive margin */}
+      <div className="flex-1 md:ml-[72px] flex flex-col h-screen">
+        <header className="h-14 md:h-16 flex items-center justify-between px-4 md:px-6 bg-transparent shrink-0">
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* Nav buttons - hidden on mobile */}
+            <div className="hidden md:flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -115,21 +121,22 @@ const Index = () => {
               </Button>
             </div>
 
+            {/* Next Prayer - Compact on mobile */}
             {nextPrayer && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
-                <Moon className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-primary">{nextPrayer.name}</span>
-                <span className="font-arabic text-sm text-accent">{nextPrayer.arabicName}</span>
-                <span className="text-sm font-bold text-foreground">{nextPrayer.time}</span>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground border-l border-border/50 pl-2 ml-1">
-                  <Clock className="h-3 w-3" />
+              <div className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-primary/10 border border-primary/20 ml-10 md:ml-0">
+                <Moon className="h-3 md:h-4 w-3 md:w-4 text-primary" />
+                <span className="text-xs md:text-sm font-medium text-primary">{nextPrayer.name}</span>
+                <span className="hidden sm:inline font-arabic text-xs md:text-sm text-accent">{nextPrayer.arabicName}</span>
+                <span className="text-xs md:text-sm font-bold text-foreground">{nextPrayer.time}</span>
+                <div className="hidden sm:flex items-center gap-1 text-[10px] md:text-xs text-muted-foreground border-l border-border/50 pl-1.5 md:pl-2 ml-0.5 md:ml-1">
+                  <Clock className="h-2.5 md:h-3 w-2.5 md:w-3" />
                   <span>{timeUntilNext}</span>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <Button
               variant="ghost"
               size="icon"
@@ -143,10 +150,10 @@ const Index = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 overflow-y-auto pb-32 no-scrollbar">
+          <main className="flex-1 overflow-y-auto pb-24 md:pb-32 no-scrollbar">
             {activeTab === "dashboard" && <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />}
             {activeTab === "azan" && (
-              <div className="p-6 max-w-2xl mx-auto animate-fade-in">
+              <div className="p-4 md:p-6 max-w-2xl mx-auto animate-fade-in">
                 <AzanPlayer
                   {...azanScheduler}
                   onPrayerTimesUpdate={updatePrayerTimes}
@@ -155,17 +162,17 @@ const Index = () => {
               </div>
             )}
             {activeTab === "pa" && (
-              <div className="p-6 max-w-4xl mx-auto animate-fade-in">
+              <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
                 <PASystem />
               </div>
             )}
             {activeTab === "admin" && (
-              <div className="p-6 animate-fade-in">
+              <div className="p-4 md:p-6 animate-fade-in">
                 <AdminPanel />
               </div>
             )}
             {activeTab === "settings" && (
-              <div className="p-6 animate-fade-in">
+              <div className="p-4 md:p-6 animate-fade-in">
                 <SettingsPanel />
               </div>
             )}
