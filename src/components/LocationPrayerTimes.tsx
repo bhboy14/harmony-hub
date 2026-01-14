@@ -78,8 +78,8 @@ const CITIES_BY_COUNTRY: Record<string, string[]> = {
 };
 
 export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: LocationPrayerTimesProps) => {
-  const [country, setCountry] = useState(() => localStorage.getItem('prayerCountry') || "SA");
-  const [city, setCity] = useState(() => localStorage.getItem('prayerCity') || "Mecca");
+  const [country, setCountry] = useState(() => localStorage.getItem('prayerCountry') || "BH");
+  const [city, setCity] = useState(() => localStorage.getItem('prayerCity') || "Manama");
   const [customCity, setCustomCity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
@@ -154,13 +154,9 @@ export const LocationPrayerTimes = ({ onTimesUpdate, onLocationChange }: Locatio
     }
   };
 
-  // Fetch on mount if we have saved location
+  // Fetch on mount - always fetch, use defaults if not saved
   useEffect(() => {
-    const savedCountry = localStorage.getItem('prayerCountry');
-    const savedCity = localStorage.getItem('prayerCity');
-    if (savedCountry && savedCity) {
-      fetchPrayerTimes();
-    }
+    fetchPrayerTimes();
   }, []);
 
   // Update city when country changes
