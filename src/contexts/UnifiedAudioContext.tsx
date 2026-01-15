@@ -4,6 +4,7 @@ import { useSoundCloud } from "@/contexts/SoundCloudContext";
 import { useToast } from "@/hooks/use-toast";
 import { useUnifiedQueue, QueueTrack } from "@/hooks/useUnifiedQueue";
 import { useAuth } from "@/contexts/AuthContext";
+import { useStreamResilience } from "@/hooks/useStreamResilience";
 
 export type AudioSource = "spotify" | "local" | "youtube" | "soundcloud" | "pa" | null;
 
@@ -62,6 +63,15 @@ interface UnifiedAudioContextType {
   isSyncing: boolean;
   connectedDevices: number;
   broadcastPlaybackState: (action: string) => void;
+  // Stream resilience
+  isBuffering: boolean;
+  isFallbackActive: boolean;
+  bufferingSource: string | null;
+  emergencyTrack: { name: string; url: string; isDefault: boolean };
+  setCustomEmergencyTrack: (file: File) => void;
+  resetEmergencyTrack: () => void;
+  manualTriggerFallback: () => Promise<void>;
+  stopFallback: () => Promise<void>;
 }
 
 export interface LocalTrackInfo {
@@ -106,6 +116,24 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const youtubePlayerRef = useRef<any>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Stream resilience for fallback buffering
+  const streamResilience = useStreamResilience({
+    onFallbackTriggered: () => {
+      console.log("[UnifiedAudio] Stream fallback triggered");
+    },
+    onStreamRestored: () => {
+      console.log("[UnifiedAudio] Stream restored from fallback");
+    },
+  });
+
+  // Monitor local audio for buffering
+  useEffect(() => {
+    if (localAudioRef.current && activeSource === "local") {
+      const cleanup = streamResilience.monitorAudioElement(localAudioRef.current, "local");
+      return cleanup;
+    }
+  }, [activeSource, streamResilience.monitorAudioElement]);
 
   // Sync state with Spotify Context when Spotify is active
   useEffect(() => {
@@ -405,6 +433,15 @@ export const UnifiedAudioProvider = ({ children }: { children: ReactNode }) => {
         isSyncing: false,
         connectedDevices: 0,
         broadcastPlaybackState: () => {},
+        // Stream resilience
+        isBuffering: streamResilience.isBuffering,
+        isFallbackActive: streamResilience.isFallbackActive,
+        bufferingSource: streamResilience.bufferingSource,
+        emergencyTrack: streamResilience.emergencyTrack,
+        setCustomEmergencyTrack: streamResilience.setCustomEmergencyTrack,
+        resetEmergencyTrack: streamResilience.resetEmergencyTrack,
+        manualTriggerFallback: streamResilience.manualTriggerFallback,
+        stopFallback: streamResilience.stopFallback,
       }}
     >
       {/* Hidden audio element for local playback */}
