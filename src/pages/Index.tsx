@@ -21,6 +21,37 @@ import { Loader2, ChevronLeft, ChevronRight, ListMusic, Moon, Clock } from "luci
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
 
+// Live clock component
+const LiveClock = () => {
+  const [time, setTime] = useState(new Date());
+  
+  useEffect(() => {
+    const interval = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const formattedTime = time.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  
+  const formattedDate = time.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  
+  return (
+    <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/50 border border-border/30">
+      <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="text-sm font-mono font-medium text-foreground">{formattedTime}</span>
+      <span className="text-xs text-muted-foreground border-l border-border/50 pl-2">{formattedDate}</span>
+    </div>
+  );
+};
+
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -101,14 +132,14 @@ const Index = () => {
 
       {/* Main content - responsive margin */}
       <div className="flex-1 md:ml-[72px] flex flex-col h-screen">
-        <header className="h-14 md:h-16 flex items-center justify-between px-4 md:px-6 bg-transparent shrink-0">
+        <header className="h-14 md:h-16 flex items-center justify-between px-4 md:px-6 bg-background/80 backdrop-blur-xl border-b border-border/30 shrink-0">
           <div className="flex items-center gap-2 md:gap-4">
             {/* Nav buttons - hidden on mobile */}
             <div className="hidden md:flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full bg-black/40"
+                className="h-8 w-8 rounded-full bg-secondary/50"
                 onClick={() => window.history.back()}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -116,7 +147,7 @@ const Index = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 rounded-full bg-black/40"
+                className="h-8 w-8 rounded-full bg-secondary/50"
                 onClick={() => window.history.forward()}
               >
                 <ChevronRight className="h-4 w-4" />
@@ -139,6 +170,8 @@ const Index = () => {
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
+            {/* Live Clock */}
+            <LiveClock />
             <OfflineIndicator />
             <Button
               variant="ghost"
