@@ -194,10 +194,27 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       const accessToken = await ensureValidToken();
       if (!accessToken) throw new Error("Not connected");
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error("Not authenticated");
+      // Use refreshSession to ensure we have a valid, non-expired JWT
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      const session = refreshData?.session;
+      
+      if (refreshError || !session?.access_token) {
+        // Fallback to getSession if refresh fails
+        const { data: { session: fallbackSession } } = await supabase.auth.getSession();
+        if (!fallbackSession?.access_token) throw new Error("Not authenticated");
+        
+        try {
+          const { data, error } = await supabase.functions.invoke("spotify-player", {
+            body: { action, accessToken, ...params },
+            headers: { Authorization: `Bearer ${fallbackSession.access_token}` },
+          });
+          if (error) throw error;
+          return data;
+        } catch (err: any) {
+          if (err?.message?.includes("429")) console.warn("Spotify Rate Limit hit");
+          throw err;
+        }
+      }
 
       try {
         const { data, error } = await supabase.functions.invoke("spotify-player", {
