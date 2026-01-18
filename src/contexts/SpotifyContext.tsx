@@ -172,8 +172,16 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (!tokens) return null;
     if (Date.now() < tokens.expiresAt - 60000) return tokens.accessToken;
     try {
+      // Get fresh Supabase session for auth header
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error("No Supabase session for Spotify token refresh");
+        return null;
+      }
+      
       const { data, error } = await supabase.functions.invoke("spotify-auth", {
         body: { action: "refresh", refreshToken: tokens.refreshToken },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error) throw error;
       const t = {
@@ -184,7 +192,8 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       setTokens(t);
       await saveTokensToDb(t);
       return t.accessToken;
-    } catch {
+    } catch (err) {
+      console.error("Failed to refresh Spotify token:", err);
       return null;
     }
   }, [tokens, saveTokensToDb]);
