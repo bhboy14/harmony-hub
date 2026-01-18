@@ -188,70 +188,109 @@ export const AllLibraryView = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Stats */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Your Library</h1>
-            <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <span>{allTracks.length} tracks from all sources</span>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Your Library</h1>
+            <div className="flex items-center gap-3 text-muted-foreground text-sm mt-1">
+              <span className="flex items-center gap-1.5">
+                <Music className="h-3.5 w-3.5" />
+                {allTracks.length} tracks
+              </span>
               {librarySync.isSyncing && (
-                <span className="flex items-center gap-1 text-primary">
+                <span className="flex items-center gap-1 text-primary animate-pulse">
                   <Loader2 className="h-3 w-3 animate-spin" />
-                  Syncing... {librarySync.progress} tracks
+                  Syncing {librarySync.progress} tracks...
                 </span>
               )}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button 
               variant="outline" 
               size="sm" 
               onClick={() => librarySync.resync()}
               disabled={librarySync.isSyncing}
+              className="h-9"
             >
-              <RefreshCw className={`h-4 w-4 mr-1 ${librarySync.isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${librarySync.isSyncing ? 'animate-spin' : ''}`} />
               Sync
             </Button>
             <LocalUploader />
-            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" /> New Playlist
+            <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)} className="h-9">
+              <Plus className="h-4 w-4 mr-1.5" /> Playlist
             </Button>
           </div>
         </div>
 
-        {/* Search & Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1 max-w-md">
+        {/* Search & Filters - Improved layout */}
+        <div className="flex flex-col gap-3">
+          <div className="relative max-w-lg">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search your library..."
+              placeholder="Search tracks, artists..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-10 bg-secondary/30 border-border/50"
+              className="pl-10 h-11 bg-secondary/30 border-border/50 rounded-lg"
             />
           </div>
+          
+          {/* Source Filter Pills */}
           <div className="flex gap-2 flex-wrap">
-            {[
-              { key: 'all', label: 'All', color: '' },
-              { key: 'spotify', label: 'Spotify', color: 'data-[active=true]:bg-[#1DB954] data-[active=true]:text-black' },
-              { key: 'youtube', label: 'YouTube', color: 'data-[active=true]:bg-red-500 data-[active=true]:text-white' },
-              { key: 'local', label: 'Local', color: 'data-[active=true]:bg-amber-500 data-[active=true]:text-black' },
-            ].map((f) => (
-              <Button
-                key={f.key}
-                variant={sourceFilter === f.key ? "default" : "outline"}
-                size="sm"
-                data-active={sourceFilter === f.key}
-                className={`rounded-full h-9 ${f.color}`}
-                onClick={() => setSourceFilter(f.key as any)}
-              >
-                {f.label}
-                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
-                  {counts[f.key as keyof typeof counts]}
-                </Badge>
-              </Button>
-            ))}
+            <Button
+              variant={sourceFilter === 'all' ? "default" : "ghost"}
+              size="sm"
+              className={`rounded-full h-8 px-4 ${sourceFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50'}`}
+              onClick={() => setSourceFilter('all')}
+            >
+              All
+              <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px] bg-background/20">
+                {counts.all}
+              </Badge>
+            </Button>
+            <Button
+              variant={sourceFilter === 'spotify' ? "default" : "ghost"}
+              size="sm"
+              className={`rounded-full h-8 px-4 gap-1.5 ${sourceFilter === 'spotify' ? 'bg-[#1DB954] text-black' : 'bg-secondary/50'}`}
+              onClick={() => setSourceFilter('spotify')}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+              </svg>
+              Spotify
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-black/20">
+                {counts.spotify}
+              </Badge>
+            </Button>
+            <Button
+              variant={sourceFilter === 'youtube' ? "default" : "ghost"}
+              size="sm"
+              className={`rounded-full h-8 px-4 gap-1.5 ${sourceFilter === 'youtube' ? 'bg-red-500 text-white' : 'bg-secondary/50'}`}
+              onClick={() => setSourceFilter('youtube')}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+              </svg>
+              YouTube
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-white/20">
+                {counts.youtube}
+              </Badge>
+            </Button>
+            <Button
+              variant={sourceFilter === 'local' ? "default" : "ghost"}
+              size="sm"
+              className={`rounded-full h-8 px-4 gap-1.5 ${sourceFilter === 'local' ? 'bg-amber-500 text-black' : 'bg-secondary/50'}`}
+              onClick={() => setSourceFilter('local')}
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+              Local
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px] bg-black/20">
+                {counts.local}
+              </Badge>
+            </Button>
           </div>
         </div>
       </div>
@@ -284,74 +323,77 @@ export const AllLibraryView = () => {
         </div>
       )}
 
-      {/* Track List */}
+      {/* Track List - Improved */}
       {filteredTracks.length > 0 ? (
-        <div className="space-y-1">
+        <div className="space-y-1 bg-secondary/20 rounded-xl p-3">
           {/* Header */}
-          <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2 text-xs text-muted-foreground uppercase tracking-wide border-b border-border/50">
-            <span className="w-8">#</span>
+          <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-3 py-2.5 text-xs text-muted-foreground uppercase tracking-wide border-b border-border/30 mb-1">
+            <span className="w-8 text-center">#</span>
             <span>Title</span>
             <span className="hidden md:block w-20 text-center">Source</span>
             <span className="hidden sm:block w-16 text-right">Duration</span>
-            <span className="w-8"></span>
+            <span className="w-10"></span>
           </div>
           
           {/* Tracks */}
-          <ScrollArea className="h-[calc(100vh-400px)] min-h-[300px]">
-            {filteredTracks.map((track, idx) => (
-              <div
-                key={track.id}
-                className="group grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 rounded-lg hover:bg-secondary/50 cursor-pointer transition-all"
-                onClick={() => playTrack(track)}
-              >
-                <div className="w-8 flex items-center justify-center">
-                  <span className="text-sm text-muted-foreground group-hover:hidden">{idx + 1}</span>
-                  <Play className="h-4 w-4 hidden group-hover:block text-primary" />
-                </div>
-                
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-secondary">
-                    {track.albumArt ? (
-                      <img src={track.albumArt} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Music className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                    )}
+          <ScrollArea className="h-[calc(100vh-420px)] min-h-[300px]">
+            <div className="space-y-0.5">
+              {filteredTracks.map((track, idx) => (
+                <div
+                  key={track.id}
+                  className="group grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-3 py-2.5 rounded-lg hover:bg-secondary/70 cursor-pointer transition-all border border-transparent hover:border-border/30"
+                  onClick={() => playTrack(track)}
+                >
+                  <div className="w-8 flex items-center justify-center">
+                    <span className="text-sm text-muted-foreground group-hover:hidden font-mono">{String(idx + 1).padStart(2, '0')}</span>
+                    <div className="hidden group-hover:flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Play className="h-3.5 w-3.5 ml-0.5" />
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">{track.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{track.artist || 'Unknown'}</p>
+                  
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-md overflow-hidden flex-shrink-0 bg-secondary shadow-sm">
+                      {track.albumArt ? (
+                        <img src={track.albumArt} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary to-muted">
+                          <Music className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate text-foreground">{track.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{track.artist || 'Unknown Artist'}</p>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="hidden md:flex items-center justify-center w-20">
-                  <SourceIcon source={track.source} size="sm" />
-                </div>
-                
-                <span className="hidden sm:flex items-center text-xs text-muted-foreground w-16 justify-end">
-                  {formatDuration(track.durationMs)}
-                </span>
-                
-                <div className="w-8 flex items-center justify-center">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100" 
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => addToQueue(track, true)}>
-                        <ListPlus className="h-4 w-4 mr-2" /> Play Next
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => addToQueue(track, false)}>
-                        <ListEnd className="h-4 w-4 mr-2" /> Add to Queue
-                      </DropdownMenuItem>
+                  
+                  <div className="hidden md:flex items-center justify-center w-20">
+                    <SourceIcon source={track.source} size="sm" />
+                  </div>
+                  
+                  <span className="hidden sm:flex items-center text-xs text-muted-foreground w-16 justify-end font-mono">
+                    {formatDuration(track.durationMs)}
+                  </span>
+                  
+                  <div className="w-10 flex items-center justify-center">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity" 
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => addToQueue(track, true)}>
+                          <ListPlus className="h-4 w-4 mr-2" /> Play Next
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => addToQueue(track, false)}>
+                          <ListEnd className="h-4 w-4 mr-2" /> Add to Queue
+                        </DropdownMenuItem>
                       {playlists.length > 0 && (
                         <>
                           <DropdownMenuSeparator />
@@ -385,6 +427,7 @@ export const AllLibraryView = () => {
                 </div>
               </div>
             ))}
+            </div>
           </ScrollArea>
         </div>
       ) : !isLoadingAny ? (
