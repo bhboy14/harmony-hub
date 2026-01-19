@@ -63,6 +63,7 @@ export interface SpotifyContextType {
   isLoading: boolean;
   isPlayerReady: boolean;
   isPlayerConnecting: boolean;
+  needsReconnect: boolean;
   tokens: SpotifyTokens | null;
   playbackState: SpotifyPlaybackState | null;
   devices: any[];
@@ -73,6 +74,7 @@ export interface SpotifyContextType {
   webPlayerDeviceId: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
+  reconnect: () => Promise<void>;
   play: (uri?: string, uris?: string[]) => Promise<void>;
   pause: () => Promise<void>;
   next: () => Promise<void>;
@@ -97,6 +99,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [isPlayerConnecting, setIsPlayerConnecting] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
   const [playbackState, setPlaybackState] = useState<SpotifyPlaybackState | null>(null);
   const [devices, setDevices] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
@@ -105,6 +108,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const [webPlayerReady, setWebPlayerReady] = useState(false);
   const [webPlayerDeviceId, setWebPlayerDeviceId] = useState<string | null>(null);
   const playerRef = useRef<SpotifyPlayerInstance | null>(null);
+  const reconnectToastShownRef = useRef(false);
 
   const volumeChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isVolumeChangingRef = useRef(false);
@@ -190,13 +194,39 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         expiresAt: Date.now() + data.expires_in * 1000,
       };
       setTokens(t);
+      setNeedsReconnect(false);
+      reconnectToastShownRef.current = false;
       await saveTokensToDb(t);
       return t.accessToken;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to refresh Spotify token:", err);
+      
+      // Check if this is an invalid/expired refresh token error
+      const errorMsg = err?.message?.toLowerCase() || "";
+      const isInvalidToken = 
+        errorMsg.includes("invalid_grant") || 
+        errorMsg.includes("refresh token") ||
+        errorMsg.includes("expired") ||
+        errorMsg.includes("revoked");
+      
+      if (isInvalidToken || err?.status === 400) {
+        setNeedsReconnect(true);
+        
+        // Show toast only once per session
+        if (!reconnectToastShownRef.current) {
+          reconnectToastShownRef.current = true;
+          toast({
+            title: "Spotify Session Expired",
+            description: "Your Spotify connection needs to be refreshed. Click to reconnect.",
+            variant: "destructive",
+            duration: 10000,
+          });
+        }
+      }
+      
       return null;
     }
-  }, [tokens, saveTokensToDb]);
+  }, [tokens, saveTokensToDb, toast]);
 
   const callSpotifyApi = useCallback(
     async (action: string, params: Record<string, any> = {}) => {
@@ -439,6 +469,29 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     window.location.href = authUrl;
   }, []);
 
+  // Reconnect to Spotify (clears tokens and restarts OAuth flow)
+  const reconnect = useCallback(async () => {
+    // Clear existing tokens from state and DB
+    if (playerRef.current) {
+      playerRef.current.disconnect();
+      playerRef.current = null;
+    }
+    setTokens(null);
+    setNeedsReconnect(false);
+    reconnectToastShownRef.current = false;
+    setPlaybackState(null);
+    setWebPlayerReady(false);
+    setWebPlayerDeviceId(null);
+    setIsPlayerReady(false);
+
+    if (user) {
+      await supabase.from("spotify_tokens").delete().eq("user_id", user.id);
+    }
+
+    // Start fresh OAuth flow
+    await connect();
+  }, [user, connect]);
+
   // Disconnect from Spotify
   const disconnect = useCallback(() => {
     if (playerRef.current) {
@@ -594,6 +647,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     isLoading,
     isPlayerReady,
     isPlayerConnecting,
+    needsReconnect,
     tokens,
     playbackState,
     devices,
@@ -604,6 +658,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     webPlayerDeviceId,
     connect,
     disconnect,
+    reconnect,
     play,
     pause,
     next,

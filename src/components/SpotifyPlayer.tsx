@@ -23,6 +23,8 @@ import {
   Mic,
   Speaker,
   Cast,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 
 // --- Waveform Visualizer Component ---
@@ -72,12 +74,14 @@ export const SpotifyPlayer = () => {
   const {
     isConnected,
     isLoading,
+    needsReconnect,
     playbackState,
     devices,
     playlists,
     savedTracks,
     connect,
     disconnect,
+    reconnect,
     play,
     pause,
     next,
@@ -93,6 +97,7 @@ export const SpotifyPlayer = () => {
 
   // Controls the "Playing on X" banner visibility
   const [showDeviceBanner, setShowDeviceBanner] = useState(true);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   useEffect(() => {
     if (isConnected) {
@@ -100,6 +105,16 @@ export const SpotifyPlayer = () => {
       loadSavedTracks();
     }
   }, [isConnected, loadPlaylists, loadSavedTracks]);
+
+  const handleReconnect = async () => {
+    setIsReconnecting(true);
+    try {
+      await reconnect();
+    } catch (err) {
+      console.error("Reconnect failed:", err);
+    }
+    // Note: reconnect redirects to Spotify OAuth, so this won't actually run
+  };
 
   // FIX: iPad/Mobile playback issue
   // Forces a device transfer if the current device is inactive before playing
@@ -181,8 +196,32 @@ export const SpotifyPlayer = () => {
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col overflow-hidden space-y-4 p-4 pt-0">
+        {/* Reconnect Banner - Shows when token refresh failed */}
+        {needsReconnect && (
+          <div className="bg-destructive/10 border border-destructive/30 rounded-md p-3 flex items-center justify-between text-sm animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <span className="font-medium text-destructive">Spotify session expired</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+              onClick={handleReconnect}
+              disabled={isReconnecting}
+            >
+              {isReconnecting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Reconnect
+            </Button>
+          </div>
+        )}
+
         {/* Active Device Banner - Always visible on top if active */}
-        {activeDevice && showDeviceBanner && (
+        {activeDevice && showDeviceBanner && !needsReconnect && (
           <div className="bg-[#1DB954]/10 border border-[#1DB954]/20 rounded-md p-2 flex items-center justify-between text-xs animate-in slide-in-from-top-2">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
