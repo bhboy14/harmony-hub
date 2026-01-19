@@ -1,7 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { cn } from "@/lib/utils";
-import { getSeekBarSettings, SeekBarSettings } from "@/hooks/useSeekBarSettings";
 
 type AudioSource = "spotify" | "local" | "youtube" | "soundcloud" | "pa" | null;
 
@@ -34,10 +33,40 @@ const formatTime = (ms: number | undefined): string => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
-/** Get the color for the given source from settings */
-const getSourceColor = (source: AudioSource, settings: SeekBarSettings): string => {
-  const key = source || "default";
-  return settings.colors[key] || settings.colors.default;
+/** Get the fill color class based on audio source */
+const getSourceColorClass = (source: AudioSource): string => {
+  switch (source) {
+    case 'spotify':
+      return 'bg-green-500 shadow-green-500/30';
+    case 'youtube':
+      return 'bg-red-500 shadow-red-500/30';
+    case 'local':
+      return 'bg-amber-500 shadow-amber-500/30';
+    case 'soundcloud':
+      return 'bg-orange-500 shadow-orange-500/30';
+    case 'pa':
+      return 'bg-red-400 shadow-red-400/30';
+    default:
+      return 'bg-primary shadow-primary/30';
+  }
+};
+
+/** Get the thumb border color based on audio source */
+const getThumbColorClass = (source: AudioSource): string => {
+  switch (source) {
+    case 'spotify':
+      return 'border-green-500 shadow-green-500/20';
+    case 'youtube':
+      return 'border-red-500 shadow-red-500/20';
+    case 'local':
+      return 'border-amber-500 shadow-amber-500/20';
+    case 'soundcloud':
+      return 'border-orange-500 shadow-orange-500/20';
+    case 'pa':
+      return 'border-red-400 shadow-red-400/20';
+    default:
+      return 'border-primary shadow-primary/20';
+  }
 };
 
 export const SeekBar = ({
@@ -51,24 +80,7 @@ export const SeekBar = ({
   // Seek state management - track dragging to prevent progress sync interference
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
-  const [settings, setSettings] = useState<SeekBarSettings>(getSeekBarSettings);
   const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Listen for settings changes from localStorage
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setSettings(getSeekBarSettings());
-    };
-    
-    // Check periodically for changes (handles same-tab updates)
-    const interval = setInterval(handleStorageChange, 500);
-    window.addEventListener("storage", handleStorageChange);
-    
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, []);
 
   // While dragging, show the drag position (in seconds); otherwise show actual progress (in ms, converted)
   const displayProgress = isDragging ? dragValue : msToSeconds(progressMs);
@@ -99,8 +111,8 @@ export const SeekBar = ({
   const currentTimeMs = isDragging ? dragValue * 1000 : progressMs;
   const maxValue = msToSeconds(durationMs) || 100;
 
-  const sourceColor = getSourceColor(activeSource ?? null, settings);
-  const opacity = settings.opacity / 100;
+  const rangeColorClass = getSourceColorClass(activeSource ?? null);
+  const thumbColorClass = getThumbColorClass(activeSource ?? null);
 
   const SliderComponent = (
     <SliderPrimitive.Root
@@ -112,25 +124,15 @@ export const SeekBar = ({
       className={cn("relative flex w-full touch-none select-none items-center cursor-pointer")}
     >
       <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-        <SliderPrimitive.Range 
-          className="absolute h-full transition-colors"
-          style={{ 
-            backgroundColor: sourceColor,
-            opacity,
-            boxShadow: `0 0 8px ${sourceColor}40`,
-          }} 
-        />
+        <SliderPrimitive.Range className={cn("absolute h-full shadow-lg transition-colors", rangeColorClass)} />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb 
         className={cn(
           "block h-5 w-5 rounded-full border-2 bg-background shadow-lg ring-offset-background transition-all",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           "hover:scale-110 disabled:pointer-events-none disabled:opacity-50",
-        )}
-        style={{
-          borderColor: sourceColor,
-          boxShadow: `0 2px 10px ${sourceColor}30`,
-        }}
+          thumbColorClass
+        )} 
       />
     </SliderPrimitive.Root>
   );

@@ -6,13 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Volume2, Clock, MapPin, Wifi, WifiOff, Database, RefreshCw, Cast, Cloud, Trash2, Download, Palette } from "lucide-react";
+import { Settings, Volume2, Clock, MapPin, Wifi, WifiOff, Database, RefreshCw, Cast, Cloud, Trash2, Download } from "lucide-react";
 import { CastingSettings } from "./CastingSettings";
-import { SeekBarColorSettings } from "./settings/SeekBarColorSettings";
 import { useOfflineSupport, clearAudioCache } from "@/hooks/useOfflineSupport";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-
 export const SettingsPanel = () => {
   const { isOnline, cachedPrayerTimes, clearCache, isPrayerTimesCacheStale } = useOfflineSupport();
   const { toast } = useToast();
@@ -55,10 +53,6 @@ export const SettingsPanel = () => {
         <TabsTrigger value="general" className="gap-2">
           <Settings className="h-4 w-4" />
           General
-        </TabsTrigger>
-        <TabsTrigger value="appearance" className="gap-2">
-          <Palette className="h-4 w-4" />
-          Appearance
         </TabsTrigger>
         <TabsTrigger value="casting" className="gap-2">
           <Cast className="h-4 w-4" />
@@ -311,12 +305,6 @@ export const SettingsPanel = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </TabsContent>
-
-      <TabsContent value="appearance">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SeekBarColorSettings />
         </div>
       </TabsContent>
 
