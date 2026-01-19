@@ -58,6 +58,15 @@ export default {
           DEFAULT: "hsl(var(--gold))",
           muted: "hsl(var(--gold-muted))",
         },
+        brand: {
+          blue: "hsl(var(--brand-blue))",
+          purple: "hsl(var(--brand-purple))",
+          teal: "hsl(var(--brand-teal))",
+          "teal-light": "hsl(var(--brand-teal-light))",
+          "pink-light": "hsl(var(--brand-pink-light))",
+          coral: "hsl(var(--brand-coral))",
+          mint: "hsl(var(--brand-mint))",
+        },
         surface: {
           1: "hsl(var(--surface-1))",
           2: "hsl(var(--surface-2))",
