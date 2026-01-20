@@ -58,7 +58,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let initialSessionResolved = false;
+
+    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Only process state changes after initial session is resolved
+      // to prevent race conditions during app initialization
+      if (!initialSessionResolved) {
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -70,9 +79,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(null);
         setRole(null);
       }
-      setIsLoading(false);
     });
 
+    // THEN check for existing session - this is the source of truth on app load
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -80,6 +89,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchUserData(session.user.id);
       }
       setIsLoading(false);
+      // Now allow auth state changes to be processed
+      initialSessionResolved = true;
     });
 
     return () => subscription.unsubscribe();
