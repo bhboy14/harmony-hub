@@ -40,16 +40,12 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
   ];
 
   const libraryNav = [
-    { id: "library", icon: Library, label: "Your Library", action: "dashboard" },
-    { id: "liked", icon: Heart, label: "Liked Songs", action: "dashboard", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
+    { id: "library", icon: Library, label: "Your Library" },
+    { id: "liked", icon: Heart, label: "Liked Songs", color: "bg-gradient-to-br from-indigo-700 to-purple-300" },
   ];
 
-  const handleNavClick = (item: typeof libraryNav[0]) => {
-    setActiveTab(item.action);
-    if (isMobile) setIsOpen(false);
-  };
-
   const handleTabClick = (id: string) => {
+    console.log("Sidebar tab clicked:", id);
     setActiveTab(id);
     if (isMobile) setIsOpen(false);
   };
@@ -105,7 +101,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
         {/* Library Navigation */}
         {libraryNav.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.action;
+          const isActive = activeTab === item.id;
           return (
             <Tooltip key={item.id}>
               <TooltipTrigger asChild>
@@ -117,7 +113,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
                       ? "bg-secondary text-foreground" 
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                   }`}
-                  onClick={() => handleNavClick(item)}
+                  onClick={() => handleTabClick(item.id)}
                 >
                   {item.color ? (
                     <div className={`w-7 h-7 rounded-md flex items-center justify-center ${item.color}`}>
