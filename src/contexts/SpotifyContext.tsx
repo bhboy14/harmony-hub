@@ -233,26 +233,13 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       const accessToken = await ensureValidToken();
       if (!accessToken) throw new Error("Not connected");
 
-      // Use refreshSession to ensure we have a valid, non-expired JWT
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      const session = refreshData?.session;
+      // Get current session without forcing refresh to avoid race conditions
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (refreshError || !session?.access_token) {
-        // Fallback to getSession if refresh fails
-        const { data: { session: fallbackSession } } = await supabase.auth.getSession();
-        if (!fallbackSession?.access_token) throw new Error("Not authenticated");
-        
-        try {
-          const { data, error } = await supabase.functions.invoke("spotify-player", {
-            body: { action, accessToken, ...params },
-            headers: { Authorization: `Bearer ${fallbackSession.access_token}` },
-          });
-          if (error) throw error;
-          return data;
-        } catch (err: any) {
-          if (err?.message?.includes("429")) console.warn("Spotify Rate Limit hit");
-          throw err;
-        }
+      if (!session?.access_token) {
+        // Session not available - log warning but don't throw to avoid cascading errors
+        console.warn("Spotify API call skipped: No active session");
+        return null;
       }
 
       try {
@@ -271,9 +258,12 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const refreshPlaybackState = useCallback(async () => {
-    if (!tokens) return;
+    if (!tokens || !user) return;
     try {
       const [playback, deviceList] = await Promise.all([callSpotifyApi("get_playback"), callSpotifyApi("get_devices")]);
+
+      // Skip state updates if API calls returned null (no session)
+      if (playback === null && deviceList === null) return;
 
       if (playback && playback.item) {
         setPlaybackState((prev) => ({
@@ -284,74 +274,86 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
           device: playback.device,
         }));
       } else if (playback === null) {
+        // Only update to not playing if we got a valid null response (not a session error)
         setPlaybackState((prev) => (prev ? { ...prev, isPlaying: false } : null));
       }
 
-      const rawDevices = deviceList?.devices || [];
-      const byKey = new Map<string, any>();
-      for (const d of rawDevices) {
-        const key = `${d?.name || ""}|${d?.type || ""}`;
-        if (!byKey.has(key) || d?.is_active) byKey.set(key, d);
+      if (deviceList) {
+        const rawDevices = deviceList?.devices || [];
+        const byKey = new Map<string, any>();
+        for (const d of rawDevices) {
+          const key = `${d?.name || ""}|${d?.type || ""}`;
+          if (!byKey.has(key) || d?.is_active) byKey.set(key, d);
+        }
+        setDevices(Array.from(byKey.values()));
       }
-      setDevices(Array.from(byKey.values()));
-    } catch (err) {
-      console.error("Error refreshing playback state:", err);
+    } catch (err: any) {
+      // Don't log auth-related errors to console spam
+      if (!err?.message?.includes("Not connected") && !err?.message?.includes("authenticated")) {
+        console.error("Error refreshing playback state:", err);
+      }
     }
-  }, [callSpotifyApi, tokens]);
+  }, [callSpotifyApi, tokens, user]);
 
   // Load playlists
   const loadPlaylists = useCallback(async () => {
-    if (!tokens) return;
+    if (!tokens || !user) return;
     try {
       const data = await callSpotifyApi("get_playlists");
       if (data?.items) {
         setPlaylists(data.items);
       }
-    } catch (err) {
-      console.error("Error loading playlists:", err);
+    } catch (err: any) {
+      if (!err?.message?.includes("Not connected")) {
+        console.error("Error loading playlists:", err);
+      }
     }
-  }, [callSpotifyApi, tokens]);
+  }, [callSpotifyApi, tokens, user]);
 
   // Load saved tracks
   const loadSavedTracks = useCallback(async () => {
-    if (!tokens) return;
+    if (!tokens || !user) return;
     try {
       const data = await callSpotifyApi("get_saved_tracks");
       if (data?.items) {
         setSavedTracks(data.items.map((item: any) => normalizeTrack(item.track)));
       }
-    } catch (err) {
-      console.error("Error loading saved tracks:", err);
+    } catch (err: any) {
+      if (!err?.message?.includes("Not connected")) {
+        console.error("Error loading saved tracks:", err);
+      }
     }
-  }, [callSpotifyApi, tokens]);
+  }, [callSpotifyApi, tokens, user]);
 
   // Load recently played
   const loadRecentlyPlayed = useCallback(async () => {
-    if (!tokens) return;
+    if (!tokens || !user) return;
     try {
       const data = await callSpotifyApi("get_recently_played");
       if (data?.items) {
         setRecentlyPlayed(data.items);
       }
-    } catch (err) {
-      console.error("Error loading recently played:", err);
+    } catch (err: any) {
+      if (!err?.message?.includes("Not connected")) {
+        console.error("Error loading recently played:", err);
+      }
     }
-  }, [callSpotifyApi, tokens]);
+  }, [callSpotifyApi, tokens, user]);
 
   // Auto-load library data when connected
   useEffect(() => {
-    if (tokens) {
+    if (tokens && user) {
       loadPlaylists();
       loadSavedTracks();
       loadRecentlyPlayed();
     }
-  }, [tokens, loadPlaylists, loadSavedTracks, loadRecentlyPlayed]);
+  }, [tokens, user, loadPlaylists, loadSavedTracks, loadRecentlyPlayed]);
 
   useEffect(() => {
-    if (!tokens) return;
+    if (!tokens || !user) return;
     const interval = setInterval(refreshPlaybackState, 3000);
     return () => clearInterval(interval);
-  }, [tokens, refreshPlaybackState]);
+  }, [tokens, user, refreshPlaybackState]);
 
   const transferPlayback = useCallback(
     async (deviceId: string) => {
