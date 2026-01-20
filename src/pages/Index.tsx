@@ -107,7 +107,15 @@ const Index = () => {
   });
 
   useEffect(() => {
-    if (!authLoading && !user) navigate("/auth");
+    // Only redirect after auth is fully loaded AND we're certain there's no user
+    // Add small delay to prevent race condition with session restoration
+    if (!authLoading && !user) {
+      const timeout = setTimeout(() => {
+        // Double-check user is still null after delay
+        navigate("/auth");
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
   }, [authLoading, user, navigate]);
 
   useEffect(() => {
