@@ -195,7 +195,9 @@ const Index = () => {
 
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-24 md:pb-32 no-scrollbar">
-            {activeTab === "dashboard" && <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />}
+            {(activeTab === "dashboard" || activeTab === "library" || activeTab === "liked") && (
+              <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
+            )}
             {activeTab === "azan" && (
               <div className="p-4 md:p-6 max-w-2xl mx-auto animate-fade-in">
                 <AzanPlayer
