@@ -205,7 +205,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
         <Button
           variant="ghost"
           size="icon"
-          className="fixed top-3 left-3 z-50 h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg md:hidden"
+          className="fixed top-3 left-3 z-[100] h-10 w-10 rounded-full bg-background/80 backdrop-blur-sm border border-border/50 shadow-lg md:hidden"
           onClick={() => setIsOpen(true)}
         >
           <Menu className="h-5 w-5" />
@@ -222,7 +222,7 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
 
   // Desktop: Fixed sidebar
   return (
-    <div className="w-[72px] h-screen bg-black flex flex-col fixed left-0 top-0 z-50">
+    <div className="w-[72px] h-screen bg-black flex flex-col fixed left-0 top-0 z-[100]">
       <SidebarContent />
     </div>
   );
