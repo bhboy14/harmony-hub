@@ -129,7 +129,10 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       ]);
       
       const localMatches = searchLocal(searchQuery);
-      setSearchResults([...spotifyTracks, ...youtubeTracks, ...localMatches]);
+      const results = [...spotifyTracks, ...youtubeTracks, ...localMatches];
+      setSearchResults(results);
+      // Avoid leaving an invisible full-screen click-catcher active when there are no results.
+      setShowResults(results.length > 0);
     } catch (error) {
       console.error('Search failed:', error);
       toast({
@@ -137,6 +140,7 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
         description: "There was an error searching. Please try again.",
         variant: "destructive",
       });
+      setShowResults(false);
     } finally {
       setIsSearching(false);
     }
@@ -319,9 +323,9 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       </div>
 
       {/* Click outside to close */}
-      {showResults && (
-        <div 
-          className="fixed inset-0 z-40" 
+      {showResults && searchResults.length > 0 && (
+        <div
+          className="fixed inset-y-0 right-0 left-0 md:left-[72px] z-40"
           onClick={() => setShowResults(false)}
         />
       )}
