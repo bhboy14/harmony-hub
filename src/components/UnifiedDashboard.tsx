@@ -45,6 +45,7 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const searchSpotify = useCallback(async (query: string): Promise<SearchResult[]> => {
     if (!spotify.isConnected || !spotify.tokens?.accessToken) return [];
@@ -116,11 +117,13 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
     if (!searchQuery.trim()) {
       setSearchResults([]);
       setShowResults(false);
+      setHasSearched(false);
       return;
     }
     
     setIsSearching(true);
     setShowResults(true);
+    setHasSearched(true);
 
     try {
       const [spotifyTracks, youtubeTracks] = await Promise.all([
@@ -131,8 +134,8 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       const localMatches = searchLocal(searchQuery);
       const results = [...spotifyTracks, ...youtubeTracks, ...localMatches];
       setSearchResults(results);
-      // Avoid leaving an invisible full-screen click-catcher active when there are no results.
-      setShowResults(results.length > 0);
+      // Keep dropdown open even when empty so the UI doesn't feel frozen.
+      setShowResults(true);
     } catch (error) {
       console.error('Search failed:', error);
       toast({
@@ -234,9 +237,20 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
             <Input
               placeholder="Search Spotify, YouTube & Local files..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              onFocus={() => searchResults.length > 0 && setShowResults(true)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSearchQuery(next);
+                if (!next.trim()) {
+                  setSearchResults([]);
+                  setShowResults(false);
+                  setHasSearched(false);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSearch();
+                if (e.key === 'Escape') setShowResults(false);
+              }}
+              onFocus={() => hasSearched && setShowResults(true)}
               className="pl-10 h-12 text-base bg-secondary/50 border-border/50"
             />
           </div>
@@ -250,69 +264,88 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
           </Button>
         </div>
 
-        {/* Search Results Dropdown */}
-        {showResults && searchResults.length > 0 && (
+        {/* Search Results Dropdown (includes empty state) */}
+        {showResults && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-background border border-border rounded-lg shadow-xl z-50 max-h-[60vh] overflow-y-auto">
-            <div className="p-3 border-b border-border/50 flex flex-wrap gap-1.5">
-              {resultCounts.spotify > 0 && (
-                <Badge variant="outline" className="text-xs bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30">
-                  <SpotifyIcon /> <span className="ml-1">{resultCounts.spotify}</span>
-                </Badge>
-              )}
-              {resultCounts.youtube > 0 && (
-                <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500 border-red-500/30">
-                  <Youtube className="h-3 w-3" /> <span className="ml-1">{resultCounts.youtube}</span>
-                </Badge>
-              )}
-              {resultCounts.local > 0 && (
-                <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
-                  <HardDrive className="h-3 w-3" /> <span className="ml-1">{resultCounts.local}</span>
-                </Badge>
-              )}
-            </div>
-            
-            <div className="divide-y divide-border/30">
-              {filteredResults.map((track) => (
-                <div
-                  key={`${track.source}-${track.id}`}
-                  className="flex items-center gap-3 p-3 hover:bg-secondary/50 cursor-pointer group transition-all"
-                  onClick={() => playTrack(track)}
-                >
-                  {track.albumArt ? (
-                    <img src={track.albumArt} alt="" className="w-12 h-12 rounded shadow object-cover flex-shrink-0" />
-                  ) : (
-                    <div className="w-12 h-12 rounded bg-secondary flex items-center justify-center flex-shrink-0">
-                      <Music className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate">{track.name}</p>
-                      <SourceIcon source={track.source} size="sm" />
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {track.source !== 'local' && !isInLibrary(track) && (
-                      <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        className="h-9 w-9"
-                        onClick={(e) => addToLibrary(track, e)}
-                        title="Add to library"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
+            {searchResults.length > 0 && (
+              <div className="p-3 border-b border-border/50 flex flex-wrap gap-1.5">
+                {resultCounts.spotify > 0 && (
+                  <Badge variant="outline" className="text-xs bg-[#1DB954]/10 text-[#1DB954] border-[#1DB954]/30">
+                    <SpotifyIcon /> <span className="ml-1">{resultCounts.spotify}</span>
+                  </Badge>
+                )}
+                {resultCounts.youtube > 0 && (
+                  <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500 border-red-500/30">
+                    <Youtube className="h-3 w-3" /> <span className="ml-1">{resultCounts.youtube}</span>
+                  </Badge>
+                )}
+                {resultCounts.local > 0 && (
+                  <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                    <HardDrive className="h-3 w-3" /> <span className="ml-1">{resultCounts.local}</span>
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {isSearching ? (
+              <div className="p-6 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching…
+              </div>
+            ) : filteredResults.length > 0 ? (
+              <div className="divide-y divide-border/30">
+                {filteredResults.map((track) => (
+                  <div
+                    key={`${track.source}-${track.id}`}
+                    className="flex items-center gap-3 p-3 hover:bg-secondary/50 cursor-pointer group transition-all"
+                    onClick={() => playTrack(track)}
+                  >
+                    {track.albumArt ? (
+                      <img src={track.albumArt} alt="" className="w-12 h-12 rounded shadow object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded bg-secondary flex items-center justify-center flex-shrink-0">
+                        <Music className="h-5 w-5 text-muted-foreground" />
+                      </div>
                     )}
-                    <Button size="icon" variant="ghost" className="h-9 w-9">
-                      <Play className="h-4 w-4" />
-                    </Button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{track.name}</p>
+                        <SourceIcon source={track.source} size="sm" />
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">{track.artist}</p>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {track.source !== 'local' && !isInLibrary(track) && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-9 w-9"
+                          onClick={(e) => addToLibrary(track, e)}
+                          title="Add to library"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button size="icon" variant="ghost" className="h-9 w-9">
+                        <Play className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center">
+                <div className="mx-auto w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+                  <Search className="h-4 w-4 text-muted-foreground" />
                 </div>
-              ))}
-            </div>
-            
-            <button 
+                <p className="mt-3 text-sm font-medium text-foreground">No results found</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Try a different spelling, or search by artist + title.
+                </p>
+              </div>
+            )}
+
+            <button
               className="w-full p-3 text-center text-sm text-muted-foreground hover:bg-secondary/30 transition-colors"
               onClick={() => setShowResults(false)}
             >
@@ -323,7 +356,7 @@ export const UnifiedDashboard = ({ localFolderTracks = [] }: UnifiedDashboardPro
       </div>
 
       {/* Click outside to close */}
-      {showResults && searchResults.length > 0 && (
+      {showResults && (
         <div
           className="fixed inset-y-0 right-0 left-0 md:left-[72px] z-40"
           onClick={() => setShowResults(false)}
