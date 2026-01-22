@@ -116,7 +116,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
   const apiVolumeTimerRef = useRef<number | null>(null);
 
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
 
   const normalizeTrack = (track: any): SpotifyTrack => {
     if (!track) return track;
@@ -176,8 +176,6 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
     if (!tokens) return null;
     if (Date.now() < tokens.expiresAt - 60000) return tokens.accessToken;
     try {
-      // Get fresh Supabase session for auth header
-      const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         console.error("No Supabase session for Spotify token refresh");
         return null;
@@ -233,9 +231,6 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
       const accessToken = await ensureValidToken();
       if (!accessToken) throw new Error("Not connected");
 
-      // Get current session without forcing refresh to avoid race conditions
-      const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session?.access_token) {
         // Session not available - log warning but don't throw to avoid cascading errors
         console.warn("Spotify API call skipped: No active session");
@@ -254,7 +249,7 @@ export const SpotifyProvider = ({ children }: { children: ReactNode }) => {
         throw err;
       }
     },
-    [ensureValidToken],
+    [ensureValidToken, session?.access_token],
   );
 
   const refreshPlaybackState = useCallback(async () => {
