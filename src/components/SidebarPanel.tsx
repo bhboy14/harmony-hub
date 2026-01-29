@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useSpotify } from "@/contexts/SpotifyContext";
-import { X, Music, Play, ChevronLeft, ChevronRight, Disc, ListMusic } from "lucide-react";
+import { Music, Play, ChevronLeft, ChevronRight, Disc, ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SeekBar } from "@/components/SeekBar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -93,8 +93,8 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
 
   return (
     <div className="w-72 sm:w-80 h-full bg-background/95 backdrop-blur-sm flex flex-col border-l border-border relative">
-      {/* Header with tab navigation */}
-      <div className="flex items-center justify-between p-3 border-b border-border/50 bg-secondary/30">
+      {/* Header with tab navigation - no close button */}
+      <div className="flex items-center justify-center p-3 border-b border-border/50 bg-secondary/30">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -104,7 +104,7 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
           <ChevronLeft className="h-4 w-4" />
         </Button>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mx-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -124,10 +124,10 @@ export const SidebarPanel = ({ isOpen, onClose }: SidebarPanelProps) => {
         <Button 
           variant="ghost" 
           size="icon" 
-          onClick={onClose}
+          onClick={goNext}
           className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary"
         >
-          <X className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 

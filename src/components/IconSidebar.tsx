@@ -57,9 +57,8 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
   ].filter(item => !item.requiredRole || hasPermission(item.requiredRole));
 
   const handleTabClick = (id: string) => {
-    console.log("🔹 Sidebar tab clicked:", id, "| Current activeTab:", activeTab);
+    console.log("🔹 Sidebar tab clicked:", id);
     setActiveTab(id);
-    console.log("🔹 setActiveTab called with:", id);
     if (isMobile) setIsOpen(false);
   };
 
