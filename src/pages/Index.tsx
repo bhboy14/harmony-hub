@@ -17,7 +17,7 @@ import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOfflineSupport } from "@/hooks/useOfflineSupport";
-import { Loader2, ChevronLeft, ChevronRight, ListMusic, Moon, Clock } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Moon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
 
@@ -55,12 +55,6 @@ const LiveClock = () => {
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [showNowPlaying, setShowNowPlaying] = useState(false);
-  
-  // Debug: Log whenever activeTab changes
-  useEffect(() => {
-    console.log("🔸 Index: activeTab changed to:", activeTab);
-  }, [activeTab]);
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const { prayerTimes, nextPrayer, timeUntilNext, updatePrayerTimes, updateLocation } = usePrayerTimes();
@@ -123,11 +117,6 @@ const Index = () => {
     }
   }, [authLoading, user, navigate]);
 
-  useEffect(() => {
-    if (unifiedAudio.currentTrack && !showNowPlaying) {
-      setShowNowPlaying(true);
-    }
-  }, [unifiedAudio.currentTrack]);
 
   if (authLoading) {
     return (
@@ -186,25 +175,19 @@ const Index = () => {
             {/* Live Clock */}
             <LiveClock />
             <OfflineIndicator />
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-8 w-8 rounded-full transition-colors ${showNowPlaying ? "text-primary" : "text-muted-foreground"}`}
-              onClick={() => setShowNowPlaying(!showNowPlaying)}
-            >
-              <ListMusic className="h-5 w-5" />
-            </Button>
             <UserMenu />
           </div>
         </header>
 
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto pb-24 md:pb-32 no-scrollbar">
-            {(() => {
-              console.log("🔸 Rendering main content for activeTab:", activeTab);
-              return null;
-            })()}
-            {(activeTab === "dashboard" || activeTab === "library" || activeTab === "liked") && (
+            {activeTab === "dashboard" && (
+              <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
+            )}
+            {activeTab === "library" && (
+              <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
+            )}
+            {activeTab === "liked" && (
               <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
             )}
             {activeTab === "azan" && (
@@ -233,9 +216,10 @@ const Index = () => {
             )}
           </main>
 
-          {showNowPlaying && (
-            <SidebarPanel isOpen={true} onClose={() => setShowNowPlaying(false)} />
-          )}
+          {/* Always visible Now Playing / Popular panel */}
+          <div className="hidden lg:block">
+            <SidebarPanel isOpen={true} onClose={() => {}} />
+          </div>
         </div>
       </div>
       <PlaybackBar />
