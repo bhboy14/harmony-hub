@@ -57,9 +57,13 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
   ].filter(item => !item.requiredRole || hasPermission(item.requiredRole));
 
   const handleTabClick = (id: string) => {
-    console.log("🔹 Sidebar tab clicked:", id);
+    console.log("🔹 Sidebar tab clicked:", id, "current:", activeTab);
+    // Use functional update to ensure state change is detected
     setActiveTab(id);
-    if (isMobile) setIsOpen(false);
+    // Close mobile menu after selection
+    if (isMobile) {
+      setIsOpen(false);
+    }
   };
 
   const quickPlaylists = spotify.playlists?.slice(0, 4) || [];
