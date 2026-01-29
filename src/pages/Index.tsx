@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { IconSidebar } from "@/components/IconSidebar";
 import { UnifiedDashboard } from "@/components/UnifiedDashboard";
+import { UnifiedLibrary } from "@/components/UnifiedLibrary";
 import { SidebarPanel } from "@/components/SidebarPanel";
 import { AzanPlayer } from "@/components/AzanPlayer";
 import { PASystem } from "@/components/PASystem";
@@ -16,7 +17,6 @@ import { useAzanScheduler } from "@/hooks/useAzanScheduler";
 import { useSpotify } from "@/contexts/SpotifyContext";
 import { useUnifiedAudio } from "@/contexts/UnifiedAudioContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOfflineSupport } from "@/hooks/useOfflineSupport";
 import { Loader2, ChevronLeft, ChevronRight, Moon, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/UserMenu";
@@ -54,8 +54,11 @@ const LiveClock = () => {
 
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState<string>("dashboard");
   const navigate = useNavigate();
+  
+  // Debug: ensure tab changes trigger re-render
+  console.log("🔸 Index rendering with activeTab:", activeTab);
   const { user, isLoading: authLoading } = useAuth();
   const { prayerTimes, nextPrayer, timeUntilNext, updatePrayerTimes, updateLocation } = usePrayerTimes();
   const mediaLibrary = useMediaLibrary();
@@ -130,7 +133,10 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background flex overflow-hidden">
-      <IconSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <IconSidebar activeTab={activeTab} setActiveTab={(tab) => {
+        console.log("🔸 Setting activeTab to:", tab);
+        setActiveTab(tab);
+      }} />
 
       {/* Main content - responsive margin */}
       <div className="flex-1 md:ml-[72px] flex flex-col h-screen">
@@ -180,12 +186,12 @@ const Index = () => {
         </header>
 
         <div className="flex-1 flex overflow-hidden">
-          <main className="flex-1 overflow-y-auto pb-24 md:pb-32 no-scrollbar">
+          <main key={activeTab} className="flex-1 overflow-y-auto pb-24 md:pb-32 no-scrollbar">
             {activeTab === "dashboard" && (
               <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
             )}
             {activeTab === "library" && (
-              <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
+              <UnifiedLibrary localFolderTracks={mediaLibrary.localTracks} />
             )}
             {activeTab === "liked" && (
               <UnifiedDashboard localFolderTracks={mediaLibrary.localTracks} />
