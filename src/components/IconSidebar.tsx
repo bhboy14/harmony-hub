@@ -76,6 +76,8 @@ export const IconSidebar = ({ activeTab, setActiveTab }: IconSidebarProps) => {
           <Button
             variant="ghost"
             size="icon"
+            aria-label={item.label}
+            data-testid={`nav-${item.id}`}
             className={`w-12 h-12 rounded-xl transition-all duration-200 ${
               isActive 
                 ? "bg-primary/20 text-primary shadow-lg shadow-primary/20" 
