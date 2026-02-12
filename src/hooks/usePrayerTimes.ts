@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface PrayerTime {
   name: string;
@@ -41,12 +41,21 @@ export const usePrayerTimes = () => {
     localStorage.setItem('prayerCity', newLocation.city);
   }, []);
 
+  // Use a ref to avoid the infinite loop: effect reads prayerTimes via ref, 
+  // only re-runs when the times string changes (not the object reference).
+  const prayerTimesRef = useRef(prayerTimes);
+  prayerTimesRef.current = prayerTimes;
+
+  // Derive a stable key from prayer times to know when they actually change
+  const timesKey = prayerTimes.map(p => p.time).join(",");
+
   useEffect(() => {
     const updateNextPrayer = () => {
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const current = prayerTimesRef.current;
 
-      const updatedTimes = prayerTimes.map((prayer) => {
+      const updatedTimes = current.map((prayer) => {
         const [hours, minutes] = prayer.time.split(":").map(Number);
         const prayerMinutes = hours * 60 + minutes;
         return { ...prayer, prayerMinutes };
@@ -55,12 +64,11 @@ export const usePrayerTimes = () => {
       let nextIndex = updatedTimes.findIndex((p) => p.prayerMinutes > currentMinutes);
       if (nextIndex === -1) nextIndex = 0;
 
-      const updated = prayerTimes.map((p, i) => ({ ...p, isNext: i === nextIndex }));
-      setPrayerTimes(updated);
-      setNextPrayer(updated[nextIndex]);
+      const next = { ...current[nextIndex], isNext: true };
+      setNextPrayer(next);
 
       // Calculate time until next prayer
-      const [nextHours, nextMinutes] = updated[nextIndex].time.split(":").map(Number);
+      const [nextHours, nextMinutes] = next.time.split(":").map(Number);
       let nextPrayerMinutes = nextHours * 60 + nextMinutes;
       if (nextPrayerMinutes <= currentMinutes) {
         nextPrayerMinutes += 24 * 60;
@@ -74,7 +82,7 @@ export const usePrayerTimes = () => {
     updateNextPrayer();
     const interval = setInterval(updateNextPrayer, 60000);
     return () => clearInterval(interval);
-  }, [prayerTimes]);
+  }, [timesKey]);
 
   return { 
     prayerTimes, 
